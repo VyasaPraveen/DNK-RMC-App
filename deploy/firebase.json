@@ -1,0 +1,19 @@
+{
+  "hosting": [
+    {
+      "target": "app",
+      "public": "billing",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"]
+    },
+    {
+      "target": "billing",
+      "public": "billing",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"]
+    },
+    {
+      "target": "proposal",
+      "public": "proposal",
+      "ignore": ["firebase.json", "**/.*", "**/node_modules/**"]
+    }
+  ]
+}

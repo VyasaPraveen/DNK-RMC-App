@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build/test scratch
+app/_*.js
+app/_logo*.*
+app/dist-artifact.html
+**/*.tmp
+
+# IDE / tooling
+.qodo/
+.vscode/
+.idea/
+
+# Firebase
+.firebase/
+firebase-debug.log
+*firebase*.log
+
+# OS
+Thumbs.db
+.DS_Store
