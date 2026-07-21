@@ -6,7 +6,6 @@
     "dnk-rmc-est-817e1": {
       "hosting": {
         "app": ["dnk-powerconmix"],
-        "billing": ["dnk-rmc-billing"],
         "proposal": ["dnk-rmc-proposal"]
       }
     }

@@ -118,6 +118,30 @@ a{color:var(--brand);text-decoration:none}
 .lockcard .feats li::before{content:'✓';position:absolute;left:0;color:var(--green);font-weight:800}
 @media(max-width:820px){.lockcard{left:0}}
 
+/* demo banner in sidebar */
+.demoband{background:linear-gradient(90deg,var(--gold),var(--gold-dark));color:#3a2e00;font-size:11px;font-weight:800;text-align:center;padding:6px;letter-spacing:.4px}
+
+/* inventory / attendance */
+.pill.low{background:#fdecec;color:#c22}
+.pill.ok2{background:#e5f6ea;color:#1a7d38}
+.stock-low{color:var(--danger)}
+.att-btns{display:inline-flex;gap:5px}
+.att-btn{border:1px solid var(--line);background:#fff;border-radius:7px;padding:4px 10px;cursor:pointer;font-weight:800;font-size:12px;color:var(--muted)}
+.att-btn:hover{border-color:var(--brand)}
+.att-btn.P.on{background:#e5f6ea;border-color:#2fa84f;color:#1a7d38}
+.att-btn.A.on{background:#fdecec;border-color:#e5484d;color:#c22}
+.att-btn.H.on{background:#fff5e0;border-color:#e0a400;color:#a86b00}
+.att-btn.L.on{background:#eef;border-color:#3b46b0;color:#3b46b0}
+
+/* demo ended screen */
+.demo-end{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;
+  background:radial-gradient(1000px 500px at 20% -10%,var(--brand-mid),transparent),linear-gradient(135deg,var(--brand),var(--brand-dark))}
+.demo-end .card{background:#fff;border-radius:18px;max-width:460px;text-align:center;padding:38px 34px;box-shadow:0 30px 80px rgba(0,0,0,.45)}
+.demo-end img{width:110px;height:110px;object-fit:contain;border-radius:14px}
+.demo-end h1{color:var(--brand);font-size:23px;margin:16px 0 8px}
+.demo-end p{color:var(--muted);font-size:14px;line-height:1.65;margin:0}
+.demo-end .dcontact{margin-top:18px;font-size:12px;color:var(--muted);line-height:1.9}
+
 /* permission checkbox grid */
 .permgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
 .permchk{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:500;color:var(--text);background:#f7f9fc;border:1px solid var(--line);border-radius:8px;padding:8px 10px;cursor:pointer}
