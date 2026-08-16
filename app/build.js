@@ -21,6 +21,27 @@ ${app}
 // 1) Artifact body (no doctype/html/head/body — the host wraps it)
 fs.writeFileSync('dist-artifact.html', body);
 
+// Firebase Auth (email/password sign-in + real password-reset emails).
+// The apiKey is a public client identifier (safe to embed). If the SDK fails to
+// load (offline), window.fbAuth stays null and the app falls back to local auth.
+const firebaseHead = `
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<script>
+try{
+  firebase.initializeApp({
+    apiKey:"AIzaSyC4y1CjXwA1v6RUZ1DMZoZNht_YGR_O7ds",
+    authDomain:"dnk-rmc.firebaseapp.com",
+    projectId:"dnk-rmc",
+    storageBucket:"dnk-rmc.firebasestorage.app",
+    messagingSenderId:"400220819441",
+    appId:"1:400220819441:web:28bbe7887256d8e22e3e50"
+  });
+  window.fbApp = firebase.app();
+  window.fbAuth = firebase.auth();
+}catch(e){ window.fbApp=null; window.fbAuth=null; }
+</script>`;
+
 // 2) Standalone (double-click / host anywhere)
 const standalone = `<!doctype html>
 <html lang="en">
@@ -28,6 +49,7 @@ const standalone = `<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DNK Power Conmix — RMC Billing System</title>
+${firebaseHead}
 </head>
 <body>
 ${body}

@@ -4,6 +4,23 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>DNK Power Conmix — RMC Billing System</title>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<script>
+try{
+  firebase.initializeApp({
+    apiKey:"AIzaSyC4y1CjXwA1v6RUZ1DMZoZNht_YGR_O7ds",
+    authDomain:"dnk-rmc.firebaseapp.com",
+    projectId:"dnk-rmc",
+    storageBucket:"dnk-rmc.firebasestorage.app",
+    messagingSenderId:"400220819441",
+    appId:"1:400220819441:web:28bbe7887256d8e22e3e50"
+  });
+  window.fbApp = firebase.app();
+  window.fbAuth = firebase.auth();
+}catch(e){ window.fbApp=null; window.fbAuth=null; }
+</script>
 </head>
 <body>
 <style>
@@ -710,7 +727,7 @@ function renderLogin(){
     <div class="login-right">
       <h2>Sign in</h2>
       <div class="sub">Access the billing &amp; plant management system</div>
-      <div class="field"><label>Username</label><input id="u" autocomplete="username" placeholder="Enter your username" onkeydown="if(event.key==='Enter')doLogin()"></div>
+      <div class="field"><label>Username or Email</label><input id="u" autocomplete="username" placeholder="Enter your username or email" onkeydown="if(event.key==='Enter')doLogin()"></div>
       <div class="field" style="margin-top:14px"><label>Password</label>
         <div class="pwd-wrap"><input id="p" type="password" autocomplete="current-password" placeholder="Enter your password" onkeydown="if(event.key==='Enter')doLogin()">
         <button type="button" class="pwd-eye" onclick="togglePwd('p',this)" tabindex="-1">👁</button></div></div>
@@ -720,31 +737,91 @@ function renderLogin(){
   </div></div>`;
 }
 function togglePwd(id,btn){ const e=document.getElementById(id); if(!e)return; e.type=e.type==='password'?'text':'password'; if(btn) btn.classList.toggle('on',e.type==='text'); }
+function findUserByLogin(id){ id=normKey(id); return (DB.users||[]).find(x=>normKey(x.username)===id || (x.email&&normKey(x.email)===id)); }
+function localPwdOk(user,pwd){ return !user.pwd || user.pwd===hashStr(pwd); }
 function doLogin(){
-  const uname=normKey(val('u')); const pwd=document.getElementById('p')?document.getElementById('p').value:'';
-  if(!uname) return toast('Enter your username','err');
-  const user=(DB.users||[]).find(x=>normKey(x.username)===uname);
-  if(!user) return toast('No account found for that username','err');
+  const idRaw=val('u'); const pwd=document.getElementById('p')?document.getElementById('p').value:'';
+  if(!idRaw) return toast('Enter your username or email','err');
+  const user=findUserByLogin(idRaw);
+  if(!user) return toast('No account found for that username / email','err');
   if(user.active===false) return toast('This account is disabled — contact the administrator','err');
-  if(user.pwd && user.pwd!==hashStr(pwd)) return toast('Incorrect password','err');
-  ME={id:user.id,name:user.name,username:user.username,role:user.role,perms:{...(user.perms||ROLE_PERMS[user.role]||ROLE_PERMS.Admin)}};
+  // Email accounts authenticate against Firebase Auth (cloud) when online.
+  if(user.email && window.fbAuth){
+    toast('Signing in…');
+    window.fbAuth.signInWithEmailAndPassword(user.email, pwd).then(()=>{
+      user.pwd=hashStr(pwd); save(); finishLogin(user);        // mirror pwd locally for offline
+    }).catch(err=>{
+      const code=(err&&err.code)||'';
+      if(code==='auth/network-request-failed'){                // offline → local fallback
+        if(localPwdOk(user,pwd)) finishLogin(user); else toast('Offline — use your last synced password','err');
+      } else if(code==='auth/wrong-password'||code==='auth/invalid-credential'||code==='auth/invalid-login-credentials'){
+        if(user.pwd && user.pwd===hashStr(pwd)) finishLogin(user); else toast('Incorrect email or password','err');
+      } else if(code==='auth/user-not-found'){
+        if(localPwdOk(user,pwd)) finishLogin(user); else toast('Incorrect password','err');
+      } else if(code==='auth/too-many-requests'){
+        toast('Too many attempts — try again shortly','err');
+      } else {
+        if(localPwdOk(user,pwd)) finishLogin(user); else toast((err&&err.message)||'Sign-in failed','err');
+      }
+    });
+    return;
+  }
+  // Local (username) accounts / offline
+  if(!localPwdOk(user,pwd)) return toast('Incorrect password','err');
+  finishLogin(user);
+}
+function finishLogin(user){
+  ME={id:user.id,name:user.name,username:user.username,email:user.email||'',role:user.role,perms:{...(user.perms||ROLE_PERMS[user.role]||ROLE_PERMS.Admin)}};
   meSet(ME); DB.user={name:user.name,role:user.role}; loggedIn=true; authSet(true); current='dashboard';
   logAct('Login','Signed in ('+user.role+')'); save(); renderApp();
 }
-function logout(){ if(ME) logAct('Logout',''); save(); loggedIn=false; ME=null; authSet(false); meSet(null); renderApp(); }
+function logout(){ if(ME) logAct('Logout',''); save(); loggedIn=false; ME=null; authSet(false); meSet(null);
+  try{ if(window.fbAuth&&window.fbAuth.currentUser) window.fbAuth.signOut(); }catch(e){}
+  renderApp(); }
+/* Create a Firebase Auth account without disturbing the current session (secondary app). */
+function fbCreateAccount(email,password){
+  return new Promise(resolve=>{
+    if(!window.firebase||!window.fbApp||!email||!password){ resolve({skipped:true}); return; }
+    let sec;
+    try{ sec=window.firebase.initializeApp(window.fbApp.options,'sec_'+Math.floor(new Date().getTime())); }
+    catch(e){ resolve({skipped:true}); return; }
+    sec.auth().createUserWithEmailAndPassword(email,password)
+      .then(()=>{ try{sec.auth().signOut();}catch(e){} try{sec.delete();}catch(e){} resolve({created:true}); })
+      .catch(err=>{ try{sec.delete();}catch(e){} const c=(err&&err.code)||'';
+        if(c==='auth/email-already-in-use') resolve({exists:true});
+        else resolve({error:(err&&err.message)||'Firebase account not created'}); });
+  });
+}
 /* ---- Forgot password (client-side self-service via security question) ---- */
 function forgotModal(){
   modal('Forgot Password',
-    `<div class="field"><label>Your Username</label><input id="fg_user" placeholder="e.g. admin"></div>
-     <div class="muted" style="font-size:12px;margin-top:10px">We'll verify your identity with your security question, then let you set a new password.
-     <br><br>No security question set up? Ask your administrator to reset your password from <b>Users &amp; Permissions</b>.</div>`,
+    `<div class="field"><label>Your Username or Email</label><input id="fg_user" placeholder="e.g. admin or you@email.com"></div>
+     <div class="muted" style="font-size:12px;margin-top:10px">If your account has an email on file, we'll email you a secure password-reset link.
+     Otherwise we'll verify your security question so you can set a new password.</div>`,
     `<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="forgotNext()">Continue →</button>`);
 }
 function forgotNext(){
-  const uname=normKey(val('fg_user'));
-  if(!uname) return toast('Enter your username','err');
-  const u=(DB.users||[]).find(x=>normKey(x.username)===uname);
-  if(!u) return toast('No account found for that username','err');
+  const idv=normKey(val('fg_user'));
+  if(!idv) return toast('Enter your username or email','err');
+  const u=findUserByLogin(idv);
+  if(!u) return toast('No account found','err');
+  // Real reset email via Firebase when the account has an email
+  if(u.email && window.fbAuth){
+    toast('Sending reset link…');
+    window.fbAuth.sendPasswordResetEmail(u.email).then(()=>{
+      logAct('Password reset email','Sent to '+u.email); save();
+      closeModal(); toast('Reset link sent to '+u.email,'ok');
+    }).catch(err=>{
+      const c=(err&&err.code)||'';
+      if(c==='auth/user-not-found'){ toast('No email account on file — using security question','err'); forgotSecurity(u); }
+      else if(c==='auth/network-request-failed'){ toast('Offline — using security question','err'); forgotSecurity(u); }
+      else toast((err&&err.message)||'Could not send reset email','err');
+    });
+    return;
+  }
+  forgotSecurity(u);
+}
+function forgotSecurity(u){
   if(!u.secQ||!u.secA) return toast('No security question set — ask your admin to reset it','err');
   closeModal();
   modal('Reset Password — '+u.name,
@@ -1557,9 +1634,10 @@ function renderUsers(){
   document.getElementById('main').innerHTML=topbar('Users & Permissions','Create staff logins and control what each person can access',
     `<button class="btn gold" onclick="userModal()">➕ Add User</button>`)+
    `<div class="card"><div class="bd" style="padding:0">
-    <table class="table"><thead><tr><th>Name</th><th>Login</th><th>Role</th><th>Access</th><th>Status</th><th class="right"></th></tr></thead><tbody>
+    <table class="table"><thead><tr><th>Name</th><th>Login</th><th>Email</th><th>Role</th><th>Access</th><th>Status</th><th class="right"></th></tr></thead><tbody>
     ${users.map(u=>{const n=Object.values(u.perms||{}).filter(Boolean).length;
-      return `<tr><td><b>${u.name}</b></td><td>${u.username||'-'}</td><td>${u.role}</td>
+      return `<tr><td><b>${u.name}</b></td><td>${u.username||'-'}</td>
+      <td>${u.email?(u.email+' <span class="pill nogst">Cloud</span>'):'<span class="muted">—</span>'}</td><td>${u.role}</td>
       <td>${n} of ${Object.keys(PERM_LABELS).length} modules</td>
       <td>${u.active?'<span class="pill paid">Active</span>':'<span class="pill due">Disabled</span>'}</td>
       <td class="right"><button class="btn ghost sm" onclick="userModal('${u.id}')">✎ Edit</button>${u.username==='admin'?'':`<button class="btn danger sm" onclick="delUser('${u.id}')">✕</button>`}</td></tr>`;}).join('')}
@@ -1571,12 +1649,14 @@ function userModal(id){
    `<div class="form-grid">
       <div class="field"><label>Full Name *</label><input id="us_name" value="${u.name||''}"></div>
       <div class="field"><label>Login Username *</label><input id="us_user" value="${u.username||''}"></div>
+      <div class="field full"><label>Email (enables email login &amp; reset-link)</label><input id="us_email" type="email" value="${u.email||''}" placeholder="staff@email.com — optional"></div>
       <div class="field"><label>Role (preset)</label><select id="us_role" onchange="usRole()">${['Admin','Accountant','Auditor'].map(r=>`<option ${r===u.role?'selected':''}>${r}</option>`).join('')}</select></div>
       <div class="field"><label>Status</label><select id="us_active"><option value="1" ${u.active!==false?'selected':''}>Active</option><option value="0" ${u.active===false?'selected':''}>Disabled</option></select></div>
-      <div class="field"><label>${id?'Reset Password (blank = keep)':'Password *'}</label><input id="us_pwd" type="password" placeholder="${id?'leave blank to keep current':'set a login password'}"></div>
+      <div class="field"><label>${id?'Reset Password (blank = keep)':'Password *'}</label><input id="us_pwd" type="password" placeholder="${id?'blank = keep current':'set a login password'}"></div>
       <div class="field"><label>Security Question</label><input id="us_secq" value="${u.secQ||''}" placeholder="e.g. Your first vehicle number?"></div>
-      <div class="field full"><label>Security Answer ${id?'(blank = keep)':'*'}</label><input id="us_seca" placeholder="${id?'leave blank to keep current':'used for password recovery'}"></div>
+      <div class="field full"><label>Security Answer ${id?'(blank = keep)':'*'}</label><input id="us_seca" placeholder="${id?'blank = keep current':'used for password recovery'}"></div>
     </div>
+    <div class="muted" style="font-size:11px;margin-top:8px">Add an email <b>and</b> a password to create a cloud account — that user can then sign in with their email and use the "Forgot password" reset-link.</div>
     <label style="display:block;margin:14px 0 6px">Module Permissions</label>
     <div id="us_perms" class="permgrid">${Object.keys(PERM_LABELS).map(k=>`<label class="permchk"><input type="checkbox" data-k="${k}" ${u.perms&&u.perms[k]?'checked':''}> ${PERM_LABELS[k]}</label>`).join('')}</div>`,
    `<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveUser('${id||''}')">Save</button>`);
@@ -1585,23 +1665,35 @@ function usRole(){ const base=ROLE_PERMS[document.getElementById('us_role').valu
 function saveUser(id){
   if(!guardEdit())return;
   const name=val('us_name'),username=val('us_user'),role=val('us_role'),active=val('us_active')==='1';
+  const email=normKey(val('us_email'));
   const pwd=document.getElementById('us_pwd')?document.getElementById('us_pwd').value:'';
   const secQ=val('us_secq'), secA=val('us_seca');
   if(!name||!username)return toast('Name and username required','err');
+  if(email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return toast('Enter a valid email address','err');
   if((DB.users||[]).some(u=>normKey(u.username)===normKey(username)&&u.id!==id)) return toast('That username is already taken','err');
+  if(email && (DB.users||[]).some(u=>u.email&&normKey(u.email)===email&&u.id!==id)) return toast('That email is already used by another user','err');
   const perms={}; document.querySelectorAll('#us_perms input').forEach(cb=>{perms[cb.dataset.k]=cb.checked?1:0;});
   DB.users=DB.users||[];
   if(id){
-    const u=DB.users.find(x=>x.id===id); Object.assign(u,{name,username,role,active,perms});
+    const u=DB.users.find(x=>x.id===id); Object.assign(u,{name,username,role,active,email});
+    u.perms=perms;
     if(pwd) u.pwd=hashStr(pwd);
     if(secQ) u.secQ=secQ;
     if(secA) u.secA=hashStr(normKey(secA));
   } else {
     if(!pwd) return toast('Set a password for the new user','err');
-    DB.users.push({id:uid('u'),name,username,role,active,perms,pwd:hashStr(pwd),secQ:secQ||'In which town is the plant located?',secA:hashStr(normKey(secA||'vkota'))});
+    DB.users.push({id:uid('u'),name,username,email,role,active,perms,pwd:hashStr(pwd),secQ:secQ||'In which town is the plant located?',secA:hashStr(normKey(secA||'vkota'))});
   }
-  logAct(id?'User updated':'User created',username+' ('+role+')');
+  logAct(id?'User updated':'User created',username+(email?(' <'+email+'>'):'')+' ('+role+')');
   save();closeModal();toast('User saved','ok');renderUsers();
+  // Provision a cloud (Firebase) account in the background when email + password are given
+  if(email && pwd && window.fbApp){
+    fbCreateAccount(email,pwd).then(res=>{
+      if(res.created) toast('Cloud account created for '+email,'ok');
+      else if(res.exists) toast('Email already has a cloud account — linked','ok');
+      else if(res.error) toast('Saved locally. Cloud account: '+res.error,'err');
+    });
+  }
 }
 function delUser(id){ if(!guardEdit())return; if(confirm('Delete user?')){ DB.users=DB.users.filter(u=>u.id!==id); save(); renderUsers(); } }
 
