@@ -7,6 +7,24 @@ const todayISO = () => { const d=new Date(); return new Date(d.getTime()-d.getTi
 function addDaysISO(iso,n){ const [y,m,d]=iso.split('-').map(Number); const dt=new Date(Date.UTC(y,m-1,d)); dt.setUTCDate(dt.getUTCDate()+n); return dt.toISOString().slice(0,10); }
 function diffDaysISO(a,b){ const A=a.split('-').map(Number),B=b.split('-').map(Number); return (Date.UTC(A[0],A[1]-1,A[2])-Date.UTC(B[0],B[1]-1,B[2]))/86400000; }
 
+/* Client-side password obfuscation (cyrb64). NOTE: this is not strong crypto —
+   localStorage data is readable on the device regardless; it just avoids storing
+   plain-text passwords. Real account security needs Firebase Auth (server-side). */
+function hashStr(s){
+  s='dnk$'+String(s==null?'':s);
+  let h1=0xdeadbeef,h2=0x41c6ce57;
+  for(let i=0;i<s.length;i++){ const ch=s.charCodeAt(i); h1=Math.imul(h1^ch,2654435761); h2=Math.imul(h2^ch,1597334677); }
+  h1=Math.imul(h1^(h1>>>16),2246822507); h1^=Math.imul(h2^(h2>>>13),3266489909);
+  h2=Math.imul(h2^(h2>>>16),2246822507); h2^=Math.imul(h1^(h1>>>13),3266489909);
+  return (h2>>>0).toString(16).padStart(8,'0')+(h1>>>0).toString(16).padStart(8,'0');
+}
+function normKey(s){ return String(s==null?'':s).trim().toLowerCase(); }
+
+/* Feature toggles — Admin can enable/disable modules from Settings without a rebuild.
+   Core modules (dashboard, settings, users) are always on so admin can't lock out. */
+const CORE_FEATURES = {dashboard:1,settings:1,users:1};
+function featureOn(r){ if(CORE_FEATURES[r]) return true; return !DB.features || DB.features[r]!==false; }
+
 /* Role presets — Admin (full), Accountant (operations, no users/settings/audit),
    Auditor (read-only: can view records & audit log, cannot create/edit/delete). */
 const ROLE_PERMS = {
@@ -81,10 +99,11 @@ function seed(){
     ],
     payments:[],
     users:[
-      {id:'u1',name:'Administrator',username:'admin',role:'Admin',active:true,perms:{...ROLE_PERMS.Admin}},
-      {id:'u2',name:'Priya (Accountant)',username:'accountant',role:'Accountant',active:true,perms:{...ROLE_PERMS.Accountant}},
-      {id:'u3',name:'Auditor',username:'auditor',role:'Auditor',active:true,perms:{...ROLE_PERMS.Auditor}},
+      {id:'u1',name:'Administrator',username:'admin',role:'Admin',active:true,perms:{...ROLE_PERMS.Admin},pwd:hashStr('admin@123'),secQ:'In which town is the plant located?',secA:hashStr('vkota')},
+      {id:'u2',name:'Priya (Accountant)',username:'accountant',role:'Accountant',active:true,perms:{...ROLE_PERMS.Accountant},pwd:hashStr('accountant@123'),secQ:'In which town is the plant located?',secA:hashStr('vkota')},
+      {id:'u3',name:'Auditor',username:'auditor',role:'Auditor',active:true,perms:{...ROLE_PERMS.Auditor},pwd:hashStr('auditor@123'),secQ:'In which town is the plant located?',secA:hashStr('vkota')},
     ],
+    features:{},
     leads:[
       {id:'l1',name:'Prakash Builders',contact:'Mr. Prakash',phone:'9845012345',source:'Reference',
         requirement:'M-25, approx 200 Cum for apartment slab',value:900000,status:'Contacted',nextFollowup:'2026-07-10',notes:'Wants bulk rate quote.'},
@@ -156,6 +175,9 @@ function migrate(d){
   d.grades.forEach(g=>{ if(!g.mix){ const sg=s.grades.find(x=>x.name===g.name); g.mix = sg?sg.mix:{...DEFAULT_MIX}; } });
   // backfill staff HR fields
   d.staff.forEach(st=>{ if(st.monthlySalary==null) st.monthlySalary=(st.wage||0)*26; if(st.leaveAllowed==null) st.leaveAllowed=2; if(st.joinDate==null) st.joinDate=''; });
+  // feature toggles + user credentials
+  if(!d.features||typeof d.features!=='object') d.features={};
+  d.users.forEach(u=>{ if(!u.pwd) u.pwd=hashStr((u.username||'user')+'@123'); if(!u.secQ){ u.secQ='In which town is the plant located?'; u.secA=hashStr('vkota'); } });
   return d;
 }
 function save(){ store.set(DB_KEY,JSON.stringify(DB)); }
@@ -209,39 +231,65 @@ function renderLogin(){
       <img src="${window.LOGO_DATA}" alt="DNK Power Conmix">
       <h1>DNK POWER CONMIX</h1>
       <div class="tag">RMC Concrete</div>
-      <p>Billing &amp; Dispatch System<br>V.Kota, Chittoor Dist., Andhra Pradesh</p>
+      <p>Billing &amp; Plant Management System<br>V.Kota, Chittoor Dist., Andhra Pradesh</p>
     </div>
     <div class="login-right">
-      <h2>Welcome</h2>
-      <div class="sub">Enter the billing &amp; dispatch system</div>
-      <div class="field"><label>Employee</label><input id="u" value="Administrator" onkeydown="if(event.key==='Enter')doLogin()"></div>
-      <div class="field" style="margin-top:12px"><label>Sign in as</label>
-        <select id="role" onchange="onRolePick()">
-          <option value="Admin">Administrator — full access</option>
-          <option value="Accountant">Accountant — billing, payments &amp; HR</option>
-          <option value="Auditor">Auditor — read-only &amp; audit log</option>
-        </select></div>
-      <div class="field" style="margin-top:12px"><label>Branch</label>
-        <select id="branch"><option>V.Kota Plant (Head Office)</option><option>Palamaner</option><option>Kuppam</option></select></div>
-      <button class="btn gold" style="width:100%;justify-content:center;margin-top:20px" onclick="doLogin()">Enter System →</button>
-      <div class="hint">Demo access &nbsp;•&nbsp; try both roles to see permission control. Secure staff passwords are enabled in the full version.</div>
+      <h2>Sign in</h2>
+      <div class="sub">Access the billing &amp; plant management system</div>
+      <div class="field"><label>Username</label><input id="u" autocomplete="username" placeholder="Enter your username" onkeydown="if(event.key==='Enter')doLogin()"></div>
+      <div class="field" style="margin-top:14px"><label>Password</label>
+        <div class="pwd-wrap"><input id="p" type="password" autocomplete="current-password" placeholder="Enter your password" onkeydown="if(event.key==='Enter')doLogin()">
+        <button type="button" class="pwd-eye" onclick="togglePwd('p',this)" tabindex="-1">👁</button></div></div>
+      <div class="login-row"><a class="link" onclick="forgotModal()">Forgot password?</a></div>
+      <button class="btn primary block" onclick="doLogin()">Sign in →</button>
     </div>
   </div></div>`;
 }
-function onRolePick(){
-  const r=document.getElementById('role').value;
-  const names={Admin:'Administrator',Accountant:'Priya (Accountant)',Auditor:'Auditor'};
-  document.getElementById('u').value = names[r]||'Administrator';
-}
+function togglePwd(id,btn){ const e=document.getElementById(id); if(!e)return; e.type=e.type==='password'?'text':'password'; if(btn) btn.classList.toggle('on',e.type==='text'); }
 function doLogin(){
-  const u=document.getElementById('u').value.trim();
-  const role=document.getElementById('role').value;
-  if(!u) return toast('Please enter the employee name','err');
-  ME={name:u,role,perms:{...ROLE_PERMS[role]}};
-  meSet(ME); DB.user={name:u,role}; loggedIn=true; authSet(true); current='dashboard';
-  logAct('Login','Signed in as '+role); save(); renderApp();
+  const uname=normKey(val('u')); const pwd=document.getElementById('p')?document.getElementById('p').value:'';
+  if(!uname) return toast('Enter your username','err');
+  const user=(DB.users||[]).find(x=>normKey(x.username)===uname);
+  if(!user) return toast('No account found for that username','err');
+  if(user.active===false) return toast('This account is disabled — contact the administrator','err');
+  if(user.pwd && user.pwd!==hashStr(pwd)) return toast('Incorrect password','err');
+  ME={id:user.id,name:user.name,username:user.username,role:user.role,perms:{...(user.perms||ROLE_PERMS[user.role]||ROLE_PERMS.Admin)}};
+  meSet(ME); DB.user={name:user.name,role:user.role}; loggedIn=true; authSet(true); current='dashboard';
+  logAct('Login','Signed in ('+user.role+')'); save(); renderApp();
 }
 function logout(){ if(ME) logAct('Logout',''); save(); loggedIn=false; ME=null; authSet(false); meSet(null); renderApp(); }
+/* ---- Forgot password (client-side self-service via security question) ---- */
+function forgotModal(){
+  modal('Forgot Password',
+    `<div class="field"><label>Your Username</label><input id="fg_user" placeholder="e.g. admin"></div>
+     <div class="muted" style="font-size:12px;margin-top:10px">We'll verify your identity with your security question, then let you set a new password.
+     <br><br>No security question set up? Ask your administrator to reset your password from <b>Users &amp; Permissions</b>.</div>`,
+    `<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="forgotNext()">Continue →</button>`);
+}
+function forgotNext(){
+  const uname=normKey(val('fg_user'));
+  if(!uname) return toast('Enter your username','err');
+  const u=(DB.users||[]).find(x=>normKey(x.username)===uname);
+  if(!u) return toast('No account found for that username','err');
+  if(!u.secQ||!u.secA) return toast('No security question set — ask your admin to reset it','err');
+  closeModal();
+  modal('Reset Password — '+u.name,
+    `<div class="field"><label>Security Question</label><div class="static-field">${u.secQ}</div></div>
+     <div class="field" style="margin-top:12px"><label>Your Answer *</label><input id="fg_ans" placeholder="Your answer"></div>
+     <div class="field" style="margin-top:12px"><label>New Password *</label>
+       <div class="pwd-wrap"><input id="fg_new" type="password" placeholder="At least 4 characters"><button type="button" class="pwd-eye" onclick="togglePwd('fg_new',this)" tabindex="-1">👁</button></div></div>
+     <div class="field" style="margin-top:12px"><label>Confirm New Password *</label><input id="fg_new2" type="password"></div>`,
+    `<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn green" onclick="forgotReset('${u.id}')">Reset Password</button>`);
+}
+function forgotReset(id){
+  const u=(DB.users||[]).find(x=>x.id===id); if(!u) return;
+  const ans=val('fg_ans'), np=document.getElementById('fg_new').value, np2=document.getElementById('fg_new2').value;
+  if(hashStr(normKey(ans))!==u.secA) return toast('Security answer is incorrect','err');
+  if(!np||np.length<4) return toast('New password must be at least 4 characters','err');
+  if(np!==np2) return toast('Passwords do not match','err');
+  u.pwd=hashStr(np); logAct('Password reset','Self-service reset — '+u.username); save(); closeModal();
+  toast('Password updated — please sign in with your new password','ok');
+}
 
 /* ---------------- Shell ---------------- */
 const NAV=[
@@ -258,9 +306,9 @@ const NAV=[
     {r:'payroll',ic:'🧾',t:'Salary / Payroll'},
   ]},
   {grp:'Sales Tools',items:[
-    {r:'leads',ic:'🎯',t:'Leads & Follow-up',pro:1},
-    {r:'concalc',ic:'📐',t:'Concrete Calculator',pro:1},
-    {r:'revenue',ic:'💹',t:'Revenue Calculator',pro:1},
+    {r:'leads',ic:'🎯',t:'Leads & Follow-up'},
+    {r:'concalc',ic:'📐',t:'Concrete Calculator'},
+    {r:'revenue',ic:'💹',t:'Revenue Calculator'},
   ]},
   {grp:'Masters',items:[
     {r:'customers',ic:'🏢',t:'Customers'},
@@ -272,7 +320,7 @@ const NAV=[
   {grp:'Insights',items:[
     {r:'reports',ic:'📈',t:'Reports & Export'},
     {r:'activity',ic:'🕒',t:'Activity Log'},
-    {r:'users',ic:'👥',t:'Users & Permissions',pro:1},
+    {r:'users',ic:'👥',t:'Users & Permissions'},
     {r:'settings',ic:'⚙️',t:'Settings & Backup'},
   ]},
 ];
@@ -280,10 +328,10 @@ function renderApp(){
   if(!loggedIn){ renderLogin(); return; }
   const perms=myPerms();
   const nav = NAV.map(g=>{
-    const items=g.items.filter(i=>perms[i.r]);
+    const items=g.items.filter(i=>perms[i.r] && featureOn(i.r));
     if(!items.length) return '';
     return `<div class="grp">${g.grp}</div>`+items.map(i=>
-      `<a class="${current===i.r?'active':''}" onclick="go('${i.r}')"><span class="ic">${i.ic}</span><span class="nt">${i.t}</span>${i.pro?'<span class="pro">PRO</span>':''}</a>`).join('');
+      `<a class="${current===i.r?'active':''}" onclick="go('${i.r}')"><span class="ic">${i.ic}</span><span class="nt">${i.t}</span></a>`).join('');
   }).join('');
   document.getElementById('root').innerHTML=`
   <div class="app">
@@ -293,7 +341,7 @@ function renderApp(){
     </div>
     <div class="main" id="main"></div>
   </div>`;
-  if(!perms[current]) current='dashboard';
+  if(!perms[current] || !featureOn(current)) current='dashboard';
   (routes[current]||renderDashboard)();
 }
 function topbar(title,sub,actions){
@@ -872,7 +920,25 @@ function renderSettings(){
         <hr style="margin:18px 0;border:none;border-top:1px solid var(--line)">
         <button class="btn danger" style="width:100%;justify-content:center" onclick="resetDemo()">↺ Reset to Demo Data</button>
       </div></div>
-    </div>`;
+    </div>`+featureManageHTML();
+}
+function featureManageHTML(){
+  const items=Object.keys(PERM_LABELS).filter(k=>!CORE_FEATURES[k]);
+  return `<div class="card" style="margin-top:16px"><div class="hd"><h3>Feature Management</h3><span class="muted" style="font-size:12px">Turn modules on / off for everyone — no redevelopment needed</span></div>
+    <div class="bd"><div class="feature-grid">
+    ${items.map(k=>{const on=featureOn(k);
+      return `<label class="feature-row"><span>${PERM_LABELS[k]}</span>
+        <input type="checkbox" class="switch" ${on?'checked':''} onchange="toggleFeature('${k}',this.checked)"></label>`;}).join('')}
+    </div>
+    <div class="muted" style="font-size:11px;margin-top:12px">Core modules (Dashboard, Users, Settings) are always available. A disabled module disappears from every user's menu instantly.</div>
+    </div></div>`;
+}
+function toggleFeature(k,on){
+  if(!guardEdit())return;
+  DB.features=DB.features||{};
+  if(on) delete DB.features[k]; else DB.features[k]=false;
+  logAct('Feature '+(on?'enabled':'disabled'),PERM_LABELS[k]||k);
+  save(); toast((PERM_LABELS[k]||k)+' '+(on?'enabled':'disabled'),'ok'); renderApp();
 }
 function saveCompany(){
   const co=DB.company;
@@ -895,7 +961,7 @@ function restore(){
 }
 function resetDemo(){ if(confirm('Reset all data to demo? Current data will be lost.')){ DB=seed(); save(); go('dashboard'); toast('Reset to demo data'); } }
 
-/* ================= PREMIUM MODULES (built fully; locked in DEMO_MODE) ================= */
+/* ================= SALES TOOLS (Leads, Calculators — all fully unlocked) ================= */
 
 /* ---- Concrete Calculator (site measurement → cubic metres) ---- */
 function renderConcalc(){
@@ -1026,28 +1092,44 @@ function renderUsers(){
     </tbody></table></div></div>`;
 }
 function userModal(id){
-  const u=id?DB.users.find(x=>x.id===id):{name:'',username:'',role:'Manager',active:true,perms:{...ROLE_PERMS.Manager}};
+  const u=id?DB.users.find(x=>x.id===id):{name:'',username:'',role:'Accountant',active:true,perms:{...ROLE_PERMS.Accountant},secQ:'In which town is the plant located?'};
   modal((id?'Edit':'Add')+' User',
    `<div class="form-grid">
       <div class="field"><label>Full Name *</label><input id="us_name" value="${u.name||''}"></div>
       <div class="field"><label>Login Username *</label><input id="us_user" value="${u.username||''}"></div>
-      <div class="field"><label>Role (preset)</label><select id="us_role" onchange="usRole()">${['Admin','Manager'].map(r=>`<option ${r===u.role?'selected':''}>${r}</option>`).join('')}</select></div>
-      <div class="field"><label>Status</label><select id="us_active"><option value="1" ${u.active?'selected':''}>Active</option><option value="0" ${!u.active?'selected':''}>Disabled</option></select></div>
+      <div class="field"><label>Role (preset)</label><select id="us_role" onchange="usRole()">${['Admin','Accountant','Auditor'].map(r=>`<option ${r===u.role?'selected':''}>${r}</option>`).join('')}</select></div>
+      <div class="field"><label>Status</label><select id="us_active"><option value="1" ${u.active!==false?'selected':''}>Active</option><option value="0" ${u.active===false?'selected':''}>Disabled</option></select></div>
+      <div class="field"><label>${id?'Reset Password (blank = keep)':'Password *'}</label><input id="us_pwd" type="password" placeholder="${id?'leave blank to keep current':'set a login password'}"></div>
+      <div class="field"><label>Security Question</label><input id="us_secq" value="${u.secQ||''}" placeholder="e.g. Your first vehicle number?"></div>
+      <div class="field full"><label>Security Answer ${id?'(blank = keep)':'*'}</label><input id="us_seca" placeholder="${id?'leave blank to keep current':'used for password recovery'}"></div>
     </div>
     <label style="display:block;margin:14px 0 6px">Module Permissions</label>
     <div id="us_perms" class="permgrid">${Object.keys(PERM_LABELS).map(k=>`<label class="permchk"><input type="checkbox" data-k="${k}" ${u.perms&&u.perms[k]?'checked':''}> ${PERM_LABELS[k]}</label>`).join('')}</div>`,
-   `<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" onclick="saveUser('${id||''}')">Save</button>`);
+   `<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn primary" onclick="saveUser('${id||''}')">Save</button>`);
 }
 function usRole(){ const base=ROLE_PERMS[document.getElementById('us_role').value]||{}; document.querySelectorAll('#us_perms input').forEach(cb=>{cb.checked=!!base[cb.dataset.k];}); }
 function saveUser(id){
+  if(!guardEdit())return;
   const name=val('us_name'),username=val('us_user'),role=val('us_role'),active=val('us_active')==='1';
+  const pwd=document.getElementById('us_pwd')?document.getElementById('us_pwd').value:'';
+  const secQ=val('us_secq'), secA=val('us_seca');
   if(!name||!username)return toast('Name and username required','err');
+  if((DB.users||[]).some(u=>normKey(u.username)===normKey(username)&&u.id!==id)) return toast('That username is already taken','err');
   const perms={}; document.querySelectorAll('#us_perms input').forEach(cb=>{perms[cb.dataset.k]=cb.checked?1:0;});
   DB.users=DB.users||[];
-  if(id){Object.assign(DB.users.find(x=>x.id===id),{name,username,role,active,perms});}else{DB.users.push({id:uid('u'),name,username,role,active,perms});}
+  if(id){
+    const u=DB.users.find(x=>x.id===id); Object.assign(u,{name,username,role,active,perms});
+    if(pwd) u.pwd=hashStr(pwd);
+    if(secQ) u.secQ=secQ;
+    if(secA) u.secA=hashStr(normKey(secA));
+  } else {
+    if(!pwd) return toast('Set a password for the new user','err');
+    DB.users.push({id:uid('u'),name,username,role,active,perms,pwd:hashStr(pwd),secQ:secQ||'In which town is the plant located?',secA:hashStr(normKey(secA||'vkota'))});
+  }
+  logAct(id?'User updated':'User created',username+' ('+role+')');
   save();closeModal();toast('User saved','ok');renderUsers();
 }
-function delUser(id){ if(confirm('Delete user?')){ DB.users=DB.users.filter(u=>u.id!==id); save(); renderUsers(); } }
+function delUser(id){ if(!guardEdit())return; if(confirm('Delete user?')){ DB.users=DB.users.filter(u=>u.id!==id); save(); renderUsers(); } }
 
 /* ================= PRODUCT INVENTORY ================= */
 function product(id){ return (DB.products||[]).find(p=>p.id===id)||{}; }
