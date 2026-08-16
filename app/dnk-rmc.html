@@ -86,6 +86,22 @@ a{color:var(--brand);text-decoration:none}
 .kpi.green{border-top:3px solid var(--green)}
 .kpi.blue{border-top:3px solid var(--brand)}
 .kpi.red{border-top:3px solid var(--danger)}
+/* --- Dashboard (clean KPI cards + recent lists) --- */
+.dashkpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:18px}
+.dashkpi{position:relative;background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow)}
+.dashkpi .k-lab{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px;font-weight:600}
+.dashkpi .k-val{font-size:26px;font-weight:800;margin-top:12px;color:var(--text);line-height:1.1}
+.dashkpi .k-sub{font-size:11px;color:var(--muted);margin-top:6px}
+.dashkpi .k-ic{position:absolute;top:14px;right:15px;font-size:14px;opacity:.45}
+.dashcols{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+.dashrow{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-top:1px solid var(--line);font-size:13px}
+.dashrow:first-child{border-top:none}
+.dashrow .r-l{color:var(--text)}
+.dashrow .r-l .r-sub{color:var(--muted);margin-left:8px;font-size:12px}
+.dashrow .r-r{font-weight:700;color:var(--text);white-space:nowrap}
+.dashrow .r-r .r-q{color:var(--muted);font-weight:500;margin-right:8px}
+.dashrow a.r-l{color:var(--brand);cursor:pointer}
+@media(max-width:960px){.dashkpis{grid-template-columns:repeat(2,1fr)}.dashcols{grid-template-columns:1fr}}
 
 .btn{display:inline-flex;align-items:center;gap:7px;background:var(--brand);color:#fff;border:none;padding:9px 15px;border-radius:9px;cursor:pointer;font-size:13px;font-weight:600}
 .btn:hover{background:var(--brand-dark)}
@@ -414,29 +430,79 @@ function openPrint(html){
   ov.addEventListener('click', e=>{ if(e.target===ov) ov.remove(); });
 }
 
+/* ---- Batching Slip — mix design for the selected grade, scaled to the dispatch quantity ---- */
+function batchSlipHTML(inv, company, mix){
+  const co=company; const qty=Number(inv.qty)||0;
+  const M=mix||{cement:0,sand:0,agg20:0,agg12:0,water:0,admix:0};
+  const rows=[
+    ['Cement (OPC 53)', M.cement, 'kg', (M.cement*qty/50)],
+    ['River / M-Sand', M.sand, 'kg', null],
+    ['Coarse Aggregate 20mm', M.agg20, 'kg', null],
+    ['Coarse Aggregate 12mm', M.agg12, 'kg', null],
+    ['Water', M.water, 'ltr', null],
+    ['Admixture', M.admix, 'ltr', null],
+  ];
+  const body=rows.map(r=>{
+    const per=Number(r[1])||0, tot=per*qty;
+    const extra = r[3]!=null ? ` <span class="muted">(${(Number(r[3])||0).toFixed(1)} bags)</span>` : '';
+    return `<tr><td>${r[0]}</td><td class="r">${per.toFixed(2)} ${r[2]}/Cum</td><td class="r"><b>${tot.toFixed(2)} ${r[2]}</b>${extra}</td></tr>`;
+  }).join('');
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Batching Slip — ${inv.no||''}</title>
+    <style>body{font-family:"Segoe UI",Arial,sans-serif;color:#111;font-size:12px;padding:16px}
+    h2{margin:0}.muted{color:#666}table{border-collapse:collapse;width:100%;margin-top:10px}
+    td,th{border:1px solid #999;padding:5px 7px}.r{text-align:right}th{background:#f0f0f0;text-align:left}
+    .head{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #14508c;padding-bottom:8px}
+    .meta{display:flex;flex-wrap:wrap;gap:6px 26px;margin-top:10px}.meta div{font-size:12px}
+    .big{background:#14508c;color:#fff;padding:8px 12px;border-radius:6px;display:inline-block;margin-top:10px;font-size:15px;font-weight:700}
+    .sign{margin-top:34px;display:flex;justify-content:space-between}</style></head><body>
+    <div class="head"><div><h2>${co.name}</h2><div class="muted">${co.addressLines.join(', ')}<br>GSTIN: ${co.gstin}</div></div>
+      <img src="${window.LOGO_DATA}" style="width:70px;height:70px;object-fit:contain"></div>
+    <h3 style="margin:12px 0 0">BATCHING SLIP</h3>
+    <div class="meta">
+      <div><b>Slip / Ref No:</b> ${inv.no||'-'}</div>
+      <div><b>Date:</b> ${fmtDate(inv.date)}</div>
+      <div><b>Customer:</b> ${inv.buyerName||'-'}</div>
+      <div><b>Site:</b> ${inv.siteName||'-'}</div>
+      <div><b>Vehicle:</b> ${inv.vehicle||'-'}</div>
+      <div><b>Dispatched Through:</b> ${inv.dispatchThrough||'-'}</div>
+    </div>
+    <div class="big">Grade ${inv.gradeName||'-'} &nbsp;•&nbsp; ${qty.toFixed(2)} ${inv.unit||'Cum'}</div>
+    <table><thead><tr><th>Material</th><th class="r">Design (per Cum)</th><th class="r">Required for ${qty.toFixed(2)} Cum</th></tr></thead>
+    <tbody>${body}</tbody></table>
+    <div class="muted" style="margin-top:8px">Indicative mix design — adjust for moisture, workability &amp; site conditions before batching.</div>
+    <div class="sign"><div>Batched by: ____________________</div><div>Approved by: ____________________</div></div>
+    <div class="muted" style="margin-top:18px;text-align:center">This is a computer-generated batching slip.</div>
+    </body></html>`;
+}
+
 /* ============ DNK RMC Billing — MVP app logic (no build, localStorage) ============ */
-const DB_KEY = 'dnk_rmc_v3';
+const DB_KEY = 'dnk_rmc_v4';
+/* Default concrete mix design per Cum (kg unless noted) — used for batching slips */
+const DEFAULT_MIX = {cement:400,sand:650,agg20:720,agg12:480,water:170,admix:3.5};
 /* local calendar date (not UTC), and timezone-safe date arithmetic on YYYY-MM-DD */
 const todayISO = () => { const d=new Date(); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10); };
 function addDaysISO(iso,n){ const [y,m,d]=iso.split('-').map(Number); const dt=new Date(Date.UTC(y,m-1,d)); dt.setUTCDate(dt.getUTCDate()+n); return dt.toISOString().slice(0,10); }
 function diffDaysISO(a,b){ const A=a.split('-').map(Number),B=b.split('-').map(Number); return (Date.UTC(A[0],A[1]-1,A[2])-Date.UTC(B[0],B[1]-1,B[2]))/86400000; }
 
-/* ---- 2-day demo window: ALL options unlocked today + tomorrow, then locks ----
-   The demo starts the first time the app is opened; it stays open for that day and
-   the next, then shows the "upgrade to use the app" screen. */
-const DEMO_DAYS = 2;
-function demoStartISO(){
-  try{ let s=localStorage.getItem('dnk_demo_start'); if(!s){ s=todayISO(); localStorage.setItem('dnk_demo_start',s); } return s; }
-  catch(e){ return todayISO(); }
-}
-function demoEndISO(){ return addDaysISO(demoStartISO(), DEMO_DAYS-1); }
-function demoActive(){ return todayISO() <= demoEndISO(); }
-function demoDaysLeft(){ return Math.max(0, diffDaysISO(demoEndISO(), todayISO())+1); }
-
+/* Role presets — Admin (full), Accountant (operations, no users/settings/audit),
+   Auditor (read-only: can view records & audit log, cannot create/edit/delete). */
 const ROLE_PERMS = {
-  Admin:   {dashboard:1,newinvoice:1,invoices:1,payments:1,leads:1,concalc:1,revenue:1,inventory:1,staff:1,customers:1,sites:1,vehicles:1,grades:1,rates:1,reports:1,users:1,settings:1},
-  Manager: {dashboard:1,newinvoice:1,invoices:1,payments:1,leads:1,concalc:1,revenue:1,inventory:1,staff:1,customers:1,sites:1,vehicles:1,grades:1,rates:1,reports:1,users:0,settings:0}
+  Admin:      {dashboard:1,newinvoice:1,invoices:1,payments:1,inventory:1,staff:1,payroll:1,vendors:1,leads:1,concalc:1,revenue:1,customers:1,sites:1,vehicles:1,grades:1,rates:1,reports:1,activity:1,users:1,settings:1},
+  Accountant: {dashboard:1,newinvoice:1,invoices:1,payments:1,inventory:1,staff:1,payroll:1,vendors:1,leads:1,concalc:1,revenue:1,customers:1,sites:1,vehicles:1,grades:1,rates:1,reports:1,activity:0,users:0,settings:0},
+  Auditor:    {dashboard:1,newinvoice:0,invoices:1,payments:1,inventory:1,staff:1,payroll:1,vendors:1,leads:0,concalc:0,revenue:0,customers:1,sites:1,vehicles:1,grades:1,rates:1,reports:1,activity:1,users:0,settings:0}
 };
+/* Auditor is read-only — this gate blocks every create/edit/delete action. */
+function canEdit(){ return !(ME && ME.role==='Auditor'); }
+function guardEdit(){ if(!canEdit()){ toast('Auditor access is read-only','err'); return false; } return true; }
+function nowStamp(){ const d=new Date(); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,19).replace('T',' '); }
+/* Activity / audit trail — records who did what, timestamped */
+function logAct(action,detail){
+  try{
+    DB.activity=DB.activity||[];
+    DB.activity.push({id:uid('ac'),at:nowStamp(),user:(ME&&ME.name)||'System',role:(ME&&ME.role)||'',action,detail:detail||''});
+    if(DB.activity.length>2000) DB.activity=DB.activity.slice(-2000);
+  }catch(e){}
+}
 
 /* ---------------- Seed data (from the sample invoice) ---------------- */
 function seed(){
@@ -449,13 +515,13 @@ function seed(){
       bank:{name:"DNK POWER CONMIX",bank:"STATE BANK OF INDIA",acno:"44420047909",branch:"ACB PALAMANER",ifsc:"SBIN0000266"}
     },
     grades:[
-      {id:'g1',name:'M-15',hsn:'38245010',gst:18},
-      {id:'g2',name:'M-20',hsn:'38245010',gst:18},
-      {id:'g3',name:'M-20S',hsn:'38245010',gst:18},
-      {id:'g4',name:'M-25',hsn:'38245010',gst:18},
-      {id:'g5',name:'M-30',hsn:'38245010',gst:18},
-      {id:'g6',name:'M-35',hsn:'38245010',gst:18},
-      {id:'g7',name:'M-40',hsn:'38245010',gst:18},
+      {id:'g1',name:'M-15',hsn:'38245010',gst:18,mix:{cement:250,sand:700,agg20:700,agg12:460,water:180,admix:2.0}},
+      {id:'g2',name:'M-20',hsn:'38245010',gst:18,mix:{cement:320,sand:690,agg20:720,agg12:480,water:180,admix:2.6}},
+      {id:'g3',name:'M-20S',hsn:'38245010',gst:18,mix:{cement:330,sand:680,agg20:720,agg12:480,water:180,admix:2.8}},
+      {id:'g4',name:'M-25',hsn:'38245010',gst:18,mix:{cement:360,sand:670,agg20:720,agg12:480,water:175,admix:3.0}},
+      {id:'g5',name:'M-30',hsn:'38245010',gst:18,mix:{cement:400,sand:650,agg20:720,agg12:480,water:170,admix:3.6}},
+      {id:'g6',name:'M-35',hsn:'38245010',gst:18,mix:{cement:430,sand:640,agg20:720,agg12:480,water:165,admix:4.0}},
+      {id:'g7',name:'M-40',hsn:'38245010',gst:18,mix:{cement:460,sand:630,agg20:720,agg12:480,water:160,admix:4.6}},
     ],
     customers:[
       {id:'c1',name:'S & A INFRA',gstin:'24AEBFS2259C1ZE',state:'Gujarat',stateCode:'24',
@@ -493,7 +559,8 @@ function seed(){
     payments:[],
     users:[
       {id:'u1',name:'Administrator',username:'admin',role:'Admin',active:true,perms:{...ROLE_PERMS.Admin}},
-      {id:'u2',name:'Rajesh (Site Manager)',username:'manager',role:'Manager',active:true,perms:{...ROLE_PERMS.Manager}},
+      {id:'u2',name:'Priya (Accountant)',username:'accountant',role:'Accountant',active:true,perms:{...ROLE_PERMS.Accountant}},
+      {id:'u3',name:'Auditor',username:'auditor',role:'Auditor',active:true,perms:{...ROLE_PERMS.Auditor}},
     ],
     leads:[
       {id:'l1',name:'Prakash Builders',contact:'Mr. Prakash',phone:'9845012345',source:'Reference',
@@ -518,13 +585,29 @@ function seed(){
       {id:'sm4',productId:'p5',type:'out',qty:12,date:'2026-07-04',note:'Batching — M-30'},
     ],
     staff:[
-      {id:'st1',name:'Ramesh K',role:'Driver',phone:'9012345678',wage:650,active:true},
-      {id:'st2',name:'Suresh M',role:'Driver',phone:'9034567890',wage:650,active:true},
-      {id:'st3',name:'Anjaneyulu',role:'Batching Operator',phone:'9701122334',wage:800,active:true},
-      {id:'st4',name:'Lakshmi',role:'Office / Accounts',phone:'9885566778',wage:700,active:true},
-      {id:'st5',name:'Venkatesh',role:'Loader',phone:'9012000123',wage:550,active:true},
+      {id:'st1',name:'Ramesh K',role:'Driver',phone:'9012345678',wage:650,monthlySalary:16900,joinDate:'2025-06-01',leaveAllowed:2,active:true},
+      {id:'st2',name:'Suresh M',role:'Driver',phone:'9034567890',wage:650,monthlySalary:16900,joinDate:'2025-08-15',leaveAllowed:2,active:true},
+      {id:'st3',name:'Anjaneyulu',role:'Batching Operator',phone:'9701122334',wage:800,monthlySalary:21000,joinDate:'2024-11-10',leaveAllowed:2,active:true},
+      {id:'st4',name:'Lakshmi',role:'Office / Accounts',phone:'9885566778',wage:700,monthlySalary:18500,joinDate:'2025-01-05',leaveAllowed:3,active:true},
+      {id:'st5',name:'Venkatesh',role:'Loader',phone:'9012000123',wage:550,monthlySalary:14500,joinDate:'2025-09-01',leaveAllowed:2,active:true},
     ],
     attendance:[],
+    advances:[
+      {id:'ad1',staffId:'st1',date:'2026-07-07',amount:2000,note:'Weekly advance'},
+      {id:'ad2',staffId:'st1',date:'2026-07-14',amount:1500,note:'Weekly advance'},
+      {id:'ad3',staffId:'st3',date:'2026-07-10',amount:3000,note:'Advance'},
+    ],
+    salaryRecords:[],
+    vendors:[
+      {id:'vn1',name:'UltraTech Cement Depot',gstin:'37AAACL1234M1Z5',phone:'9700000001',material:'Cement',address:'Palamaner, Chittoor Dist., A.P.'},
+      {id:'vn2',name:'Sri Venkateswara Aggregates',gstin:'',phone:'9700000002',material:'Aggregate / Sand',address:'V.Kota, Chittoor Dist., A.P.'},
+      {id:'vn3',name:'BASF Admixtures (Dealer)',gstin:'29AAACB1234N1Z2',phone:'9700000003',material:'Admixture',address:'Bengaluru, Karnataka'},
+    ],
+    purchases:[
+      {id:'pu1',vendorId:'vn1',productId:'p1',qty:500,rate:360,amount:180000,date:'2026-07-03',billNo:'UT/5567',paid:180000,at:'2026-07-03 10:15:00'},
+      {id:'pu2',vendorId:'vn2',productId:'p2',qty:100,rate:900,amount:90000,date:'2026-07-02',billNo:'SVA/221',paid:50000,at:'2026-07-02 09:30:00'},
+    ],
+    activity:[],
     seq:1402,
     user:{name:'Administrator',role:'Admin'}
   };
@@ -543,9 +626,13 @@ function load(){
 }
 function migrate(d){
   const s=seed();
-  ['grades','customers','sites','vehicles','rates','invoices','payments','users','leads','products','stockmoves','staff','attendance'].forEach(k=>{ if(!Array.isArray(d[k])) d[k]=s[k]; });
+  ['grades','customers','sites','vehicles','rates','invoices','payments','users','leads','products','stockmoves','staff','attendance','advances','salaryRecords','vendors','purchases','activity'].forEach(k=>{ if(!Array.isArray(d[k])) d[k]=s[k]; });
   if(!d.company) d.company=s.company;
   if(d.seq==null) d.seq=s.seq;
+  // backfill grade mix designs
+  d.grades.forEach(g=>{ if(!g.mix){ const sg=s.grades.find(x=>x.name===g.name); g.mix = sg?sg.mix:{...DEFAULT_MIX}; } });
+  // backfill staff HR fields
+  d.staff.forEach(st=>{ if(st.monthlySalary==null) st.monthlySalary=(st.wage||0)*26; if(st.leaveAllowed==null) st.leaveAllowed=2; if(st.joinDate==null) st.joinDate=''; });
   return d;
 }
 function save(){ store.set(DB_KEY,JSON.stringify(DB)); }
@@ -577,7 +664,8 @@ const routes = {
   vehicles:renderVehicles, grades:renderGrades, rates:renderRates,
   reports:renderReports, settings:renderSettings,
   leads:renderLeads, concalc:renderConcalc, revenue:renderRevenue, users:renderUsers,
-  inventory:renderInventory, staff:renderStaff
+  inventory:renderInventory, staff:renderStaff, payroll:renderPayroll,
+  vendors:renderVendors, activity:renderActivity
 };
 let current='dashboard';
 function go(route){ current=route; renderApp(); }
@@ -607,7 +695,8 @@ function renderLogin(){
       <div class="field" style="margin-top:12px"><label>Sign in as</label>
         <select id="role" onchange="onRolePick()">
           <option value="Admin">Administrator — full access</option>
-          <option value="Manager">Site Manager — limited access</option>
+          <option value="Accountant">Accountant — billing, payments &amp; HR</option>
+          <option value="Auditor">Auditor — read-only &amp; audit log</option>
         </select></div>
       <div class="field" style="margin-top:12px"><label>Branch</label>
         <select id="branch"><option>V.Kota Plant (Head Office)</option><option>Palamaner</option><option>Kuppam</option></select></div>
@@ -618,16 +707,18 @@ function renderLogin(){
 }
 function onRolePick(){
   const r=document.getElementById('role').value;
-  document.getElementById('u').value = r==='Manager' ? 'Rajesh (Site Manager)' : 'Administrator';
+  const names={Admin:'Administrator',Accountant:'Priya (Accountant)',Auditor:'Auditor'};
+  document.getElementById('u').value = names[r]||'Administrator';
 }
 function doLogin(){
   const u=document.getElementById('u').value.trim();
   const role=document.getElementById('role').value;
   if(!u) return toast('Please enter the employee name','err');
   ME={name:u,role,perms:{...ROLE_PERMS[role]}};
-  meSet(ME); DB.user={name:u,role}; loggedIn=true; authSet(true); current='dashboard'; renderApp();
+  meSet(ME); DB.user={name:u,role}; loggedIn=true; authSet(true); current='dashboard';
+  logAct('Login','Signed in as '+role); save(); renderApp();
 }
-function logout(){ loggedIn=false; ME=null; authSet(false); meSet(null); renderApp(); }
+function logout(){ if(ME) logAct('Logout',''); save(); loggedIn=false; ME=null; authSet(false); meSet(null); renderApp(); }
 
 /* ---------------- Shell ---------------- */
 const NAV=[
@@ -639,7 +730,9 @@ const NAV=[
   ]},
   {grp:'Plant & Staff',items:[
     {r:'inventory',ic:'📦',t:'Product Inventory'},
+    {r:'vendors',ic:'🚛',t:'Vendors & Purchases'},
     {r:'staff',ic:'🧑‍🏭',t:'Staff Attendance'},
+    {r:'payroll',ic:'🧾',t:'Salary / Payroll'},
   ]},
   {grp:'Sales Tools',items:[
     {r:'leads',ic:'🎯',t:'Leads & Follow-up',pro:1},
@@ -655,12 +748,12 @@ const NAV=[
   ]},
   {grp:'Insights',items:[
     {r:'reports',ic:'📈',t:'Reports & Export'},
+    {r:'activity',ic:'🕒',t:'Activity Log'},
     {r:'users',ic:'👥',t:'Users & Permissions',pro:1},
     {r:'settings',ic:'⚙️',t:'Settings & Backup'},
   ]},
 ];
 function renderApp(){
-  if(!demoActive()){ renderDemoEnded(); return; }
   if(!loggedIn){ renderLogin(); return; }
   const perms=myPerms();
   const nav = NAV.map(g=>{
@@ -669,12 +762,10 @@ function renderApp(){
     return `<div class="grp">${g.grp}</div>`+items.map(i=>
       `<a class="${current===i.r?'active':''}" onclick="go('${i.r}')"><span class="ic">${i.ic}</span><span class="nt">${i.t}</span>${i.pro?'<span class="pro">PRO</span>':''}</a>`).join('');
   }).join('');
-  const left=demoDaysLeft();
   document.getElementById('root').innerHTML=`
   <div class="app">
     <div class="sidebar">
       <div class="brand"><img src="${window.LOGO_DATA}"><div><div class="bt">DNK POWER CONMIX</div><div class="bs">RMC BILLING SYSTEM</div></div></div>
-      <div class="demoband">⏳ DEMO • ${left} day${left===1?'':'s'} left</div>
       <div class="nav">${nav}</div>
     </div>
     <div class="main" id="main"></div>
@@ -682,27 +773,12 @@ function renderApp(){
   if(!perms[current]) current='dashboard';
   (routes[current]||renderDashboard)();
 }
-/* Demo expiry screen — shown after the 2-day window */
-function renderDemoEnded(){
-  document.getElementById('root').innerHTML=`
-  <div class="demo-end"><div class="card">
-    <img src="${window.LOGO_DATA}" alt="DNK Power Conmix">
-    <h1>Demo Period Has Ended</h1>
-    <p>Your <b>2-day free demo</b> of the DNK RMC Billing &amp; Plant ERP has ended.<br>
-       Upgrade to continue using the app with all features and your saved data.</p>
-    <a class="btn gold" style="justify-content:center;width:100%;margin-top:18px" href="mailto:helpdesk@epixs.in?subject=DNK%20RMC%20-%20Upgrade%20to%20Full%20Version&body=We%20would%20like%20to%20upgrade%20the%20DNK%20RMC%20app%20to%20the%20full%20version.">Upgrade to Use the App →</a>
-    <div class="dcontact">
-      EPIXS Media &nbsp;•&nbsp; helpdesk@epixs.in &nbsp;•&nbsp; +91 94411 09327<br>
-      <a href="https://dnk-rmc-proposal.web.app" target="_blank" rel="noopener">View proposal &amp; packages →</a>
-    </div>
-  </div></div>`;
-}
 function topbar(title,sub,actions){
   const u=ME||{name:'Administrator',role:'Admin'};
   return `<div class="topbar"><div><h2>${title}</h2><div class="sub">${sub||''}</div></div>
     <div style="display:flex;gap:14px;align-items:center">
     ${actions||''}
-    <div class="userchip">👤 <div><b>${u.name}</b><br><span>${u.role}${u.role==='Manager'?' • limited':''}</span></div>
+    <div class="userchip">👤 <div><b>${u.name}</b><br><span>${u.role}${u.role==='Auditor'?' • read-only':''}</span></div>
     <button class="btn ghost sm" onclick="logout()">Logout</button></div></div></div>`;
 }
 
@@ -713,22 +789,38 @@ function renderDashboard(){
   const thisMonth=today.slice(0,7);
   const monthInvs=invs.filter(i=>i.date.slice(0,7)===thisMonth);
   const todayInvs=invs.filter(i=>i.date===today);
+  const todayCum=todayInvs.reduce((s,i)=>s+i.qty,0);
   const monthSales=monthInvs.reduce((s,i)=>s+invTotals(i).grand,0);
-  const totalOut=invs.reduce((s,i)=>s+(invTotals(i).grand-(i.paid||0)),0);
-  const totalCum=invs.reduce((s,i)=>s+i.qty,0);
-  const recent=[...invs].sort((a,b)=>b.no.localeCompare(a.no)).slice(0,6);
+  const dueList=invs.filter(i=>invTotals(i).grand-(i.paid||0)>0.5);
+  const totalOut=dueList.reduce((s,i)=>s+(invTotals(i).grand-(i.paid||0)),0);
+  const dueCusts=new Set(dueList.map(i=>i.customerId)).size;
+  const activeStaff=(DB.staff||[]).filter(s=>s.active!==false).length;
+  const recent=[...invs].sort((a,b)=>(b.date+b.no).localeCompare(a.date+a.no)).slice(0,10);
+
+  const dispatchRows = recent.length ? recent.map(i=>
+     `<div class="dashrow"><div class="r-l">${fmtDate(i.date)} <span class="r-sub">${i.no}</span></div>
+        <div class="r-r"><span class="r-q">${i.qty} m³</span>₹${inr(invTotals(i).grand)}</div></div>`).join('')
+     : `<div class="empty">No dispatches yet.</div>`;
+  const invoiceRows = recent.length ? recent.map(i=>
+     `<div class="dashrow"><a class="r-l" onclick="printInvoice('${i.id}')">${i.no} <span class="r-sub">${fmtDate(i.date)}</span></a>
+        <div class="r-r">₹${inr(invTotals(i).grand)}</div></div>`).join('')
+     : `<div class="empty">No invoices yet.</div>`;
 
   document.getElementById('main').innerHTML=
-    topbar('Dashboard','Overview of dispatches, sales and outstanding',
-      `<button class="btn gold" onclick="go('newinvoice')">➕ New Dispatch / Bill</button>`)+
-    `<div class="grid kpis" style="margin-bottom:18px">
-      <div class="kpi accent"><div class="lab">This Month Sales</div><div class="val">₹${inr(monthSales)}</div><div class="sub">${monthInvs.length} invoices</div></div>
-      <div class="kpi green"><div class="lab">Today's Dispatch</div><div class="val">${todayInvs.length}</div><div class="sub">${todayInvs.reduce((s,i)=>s+i.qty,0).toFixed(2)} Cum</div></div>
-      <div class="kpi blue"><div class="lab">Total Concrete (All)</div><div class="val">${totalCum.toFixed(2)}</div><div class="sub">Cubic metres billed</div></div>
-      <div class="kpi red"><div class="lab">Outstanding</div><div class="val">₹${inr(totalOut)}</div><div class="sub">across ${invs.filter(i=>invTotals(i).grand-(i.paid||0)>0.5).length} bills</div></div>
+    topbar('Dashboard','Live snapshot of plant operations',
+      canEdit()?`<button class="btn gold" onclick="go('newinvoice')">➕ New Dispatch / Bill</button>`:'')+
+    `<div class="dashkpis">
+      <div class="dashkpi"><span class="k-ic">🚚</span><div class="k-lab">Today's Dispatch</div><div class="k-val">${todayCum.toFixed(2)} m³</div><div class="k-sub">${todayInvs.length} trip${todayInvs.length===1?'':'s'}</div></div>
+      <div class="dashkpi"><span class="k-ic">📄</span><div class="k-lab">This Month Sales</div><div class="k-val">₹${inr(monthSales)}</div><div class="k-sub">Invoiced incl. GST</div></div>
+      <div class="dashkpi"><span class="k-ic">🧾</span><div class="k-lab">Outstanding</div><div class="k-val">₹${inr(totalOut)}</div><div class="k-sub">${dueCusts} customer${dueCusts===1?'':'s'}</div></div>
+      <div class="dashkpi"><span class="k-ic">👷</span><div class="k-lab">Active Staff</div><div class="k-val">${activeStaff}</div><div class="k-sub">On payroll</div></div>
     </div>
-    <div class="card"><div class="hd"><h3>Recent Invoices</h3><a onclick="go('invoices')" class="btn ghost sm">View all →</a></div>
-    <div class="bd" style="padding:0">${invoiceTable(recent)}</div></div>`;
+    <div class="dashcols">
+      <div class="card"><div class="hd"><h3>Recent Dispatches</h3><a onclick="go('invoices')" class="btn ghost sm">View all →</a></div>
+        <div class="bd" style="padding:0">${dispatchRows}</div></div>
+      <div class="card"><div class="hd"><h3>Recent Invoices</h3><a onclick="go('invoices')" class="btn ghost sm">View all →</a></div>
+        <div class="bd" style="padding:0">${invoiceRows}</div></div>
+    </div>`;
 }
 
 function taxPill(t){
@@ -833,6 +925,7 @@ function calcBox(){
     <div class="words">${taxable>0?numToWords(grand):'—'}</div>`;
 }
 function saveInvoice(){
+  if(!guardEdit())return;
   readForm();
   if(!form.customerId){ return toast('Select a customer','err'); }
   if(!form.gradeId){ return toast('Select a concrete grade','err'); }
@@ -841,14 +934,17 @@ function saveInvoice(){
   DB.seq+=1;
   const inv={id:uid('i'),no:'DNK/'+DB.seq,date:form.date,customerId:form.customerId,siteId:form.siteId,
     gradeId:form.gradeId,vehicleId:form.vehicleId,qty:form.qty,rate:form.rate,unit:'Cum',
-    terms:form.terms,dispatchThrough:form.dispatchThrough,paid:0,createdAt:todayISO()};
-  DB.invoices.push(inv); save();
+    terms:form.terms,dispatchThrough:form.dispatchThrough,paid:0,createdAt:todayISO(),at:nowStamp()};
+  DB.invoices.push(inv);
+  logAct('Invoice created',inv.no+' — '+(customer(inv.customerId).name||'')+', '+(grade(inv.gradeId).name||'')+' '+inv.qty+' Cum, ₹'+inr(invTotals(inv).grand));
+  save();
   toast('Invoice '+inv.no+' generated','ok');
   printInvoice(inv.id);
   go('invoices');
 }
 function printInvoice(id){ const inv=DB.invoices.find(i=>i.id===id); openPrint(invoiceHTML(hydrate(inv),DB.company)); }
 function printChallan(id){ const inv=DB.invoices.find(i=>i.id===id); openPrint(invoiceHTML(hydrate(inv),DB.company,{challan:true})); }
+function printBatch(id){ const inv=DB.invoices.find(i=>i.id===id); const g=grade(inv.gradeId); openPrint(batchSlipHTML(hydrate(inv),DB.company,g.mix||DEFAULT_MIX)); }
 
 /* ---------------- Invoices list ---------------- */
 let invSearch='', invCust='';
@@ -863,6 +959,7 @@ function renderInvoices(){
         ${DB.customers.map(c=>`<option value="${c.id}" ${invCust===c.id?'selected':''}>${c.name}</option>`).join('')}
       </select>
       <button class="btn ghost" onclick="exportInvoicesCSV(invCust)">⬇ Invoices CSV</button>
+      <button class="btn ghost" onclick="zipModal()">🗜 Bulk ZIP</button>
       ${invCust?`<button class="btn ghost" onclick="exportTollCSV('${invCust}')">⬇ Toll Register</button>
         <button class="btn ghost" onclick="printStatement('${invCust}')">🖨 Statement PDF</button>`:''}
     </div>
@@ -887,13 +984,14 @@ function drawInvList(){
         <td class="right">
           <button class="btn ghost sm" onclick="printInvoice('${i.id}')">🧾 Invoice</button>
           <button class="btn ghost sm" onclick="printChallan('${i.id}')">📄 Challan</button>
+          <button class="btn ghost sm" onclick="printBatch('${i.id}')">🧪 Batch Slip</button>
           ${due>0.5?`<button class="btn green sm" onclick="payModal('${i.id}')">💰 Pay</button>`:''}
           <button class="btn danger sm" onclick="delInvoice('${i.id}')">✕</button>
         </td></tr>`;}).join('')+`</tbody></table>`
     :`<div class="empty">No matching invoices.</div>`);
 }
-function delInvoice(id){ const i=DB.invoices.find(x=>x.id===id);
-  if(confirm('Delete invoice '+i.no+'? This cannot be undone.')){ DB.invoices=DB.invoices.filter(x=>x.id!==id); save(); drawInvList(); toast('Invoice deleted'); } }
+function delInvoice(id){ if(!guardEdit())return; const i=DB.invoices.find(x=>x.id===id);
+  if(confirm('Delete invoice '+i.no+'? This cannot be undone.')){ DB.invoices=DB.invoices.filter(x=>x.id!==id); logAct('Invoice deleted',i.no); save(); drawInvList(); toast('Invoice deleted'); } }
 
 /* ---------------- Payments / Outstanding ---------------- */
 function renderPayments(){
@@ -913,7 +1011,19 @@ function renderPayments(){
         <td class="num">₹${inr(t.grand)}</td><td class="num">₹${inr(i.paid||0)}</td><td class="num"><b>₹${inr(t.grand-(i.paid||0))}</b></td>
         <td class="right"><button class="btn green sm" onclick="payModal('${i.id}')">💰 Record Payment</button></td></tr>`).join('')+
       `</tbody></table>`:`<div class="empty">🎉 No outstanding payments. All bills cleared.</div>`}
-    </div></div>`;
+    </div></div>
+    ${paymentsLedger()}`;
+}
+/* Timestamped payment entries — recent receipts with date & time */
+function paymentsLedger(){
+  const pays=[...(DB.payments||[])].sort((a,b)=>String(b.at||b.date).localeCompare(String(a.at||a.date))).slice(0,25);
+  if(!pays.length) return '';
+  return `<div class="card" style="margin-top:16px"><div class="hd"><h3>Recent Payments (timestamped)</h3></div><div class="bd" style="padding:0">
+    <table class="table"><thead><tr><th>Date / Time</th><th>Invoice</th><th>Customer</th><th class="num">Amount</th><th>Received by</th></tr></thead><tbody>`+
+    pays.map(p=>{const i=DB.invoices.find(x=>x.id===p.invoiceId)||{};
+      return `<tr><td style="white-space:nowrap">${p.at||fmtDate(p.date)}</td><td><b>${i.no||'-'}</b></td>
+      <td>${customer(i.customerId).name||'-'}</td><td class="num">₹${inr(p.amount)}</td><td>${p.by||'-'}</td></tr>`;}).join('')+
+    `</tbody></table></div></div>`;
 }
 function payModal(id){
   const i=DB.invoices.find(x=>x.id===id); const t=invTotals(i); const due=t.grand-(i.paid||0);
@@ -926,16 +1036,19 @@ function payModal(id){
      <button class="btn green" onclick="doPay('${id}')">Save Payment</button>`);
 }
 function doPay(id){
+  if(!guardEdit())return;
   const amt=parseFloat(document.getElementById('payAmt').value)||0;
   const i=DB.invoices.find(x=>x.id===id);
   i.paid=(i.paid||0)+amt; if(i.paid<0)i.paid=0;
-  DB.payments.push({id:uid('p'),invoiceId:id,amount:amt,date:todayISO()});
+  DB.payments.push({id:uid('p'),invoiceId:id,amount:amt,date:todayISO(),at:nowStamp(),by:(ME&&ME.name)||''});
+  logAct('Payment received','₹'+inr(amt)+' on '+i.no+' ('+(customer(i.customerId).name||'')+')');
   save(); closeModal(); toast('Payment recorded','ok'); renderPayments();
 }
 
 /* ---------------- Masters: generic CRUD ---------------- */
 function masterPage(title,sub,addLabel,addFn,tableHTML){
-  document.getElementById('main').innerHTML=topbar(title,sub,`<button class="btn gold" onclick="${addFn}">➕ ${addLabel}</button>`)+
+  const add = canEdit()?`<button class="btn gold" onclick="${addFn}">➕ ${addLabel}</button>`:'';
+  document.getElementById('main').innerHTML=topbar(title,sub,add)+
     `<div class="card"><div class="bd" style="padding:0">${tableHTML}</div></div>`;
 }
 
@@ -972,12 +1085,13 @@ function custModal(id){
 }
 function c_autostate(){ const g=document.getElementById('c_gstin').value; if(g.length>=2 && /^\d{2}/.test(g)){ document.getElementById('c_scode').value=g.slice(0,2);} }
 function saveCust(id){
+  if(!guardEdit())return;
   const o={name:val('c_name'),gstin:val('c_gstin'),state:val('c_state'),stateCode:val('c_scode'),address:val('c_addr'),phone:val('c_phone')};
   if(!o.name)return toast('Name required','err');
   if(id){ Object.assign(customer(id),o); } else { DB.customers.push({id:uid('c'),...o}); }
   save(); closeModal(); toast('Customer saved','ok'); renderCustomers();
 }
-function delCust(id){ if(DB.invoices.some(i=>i.customerId===id))return toast('Cannot delete — has invoices','err');
+function delCust(id){ if(!guardEdit())return; if(DB.invoices.some(i=>i.customerId===id))return toast('Cannot delete — has invoices','err');
   if(confirm('Delete customer?')){ DB.customers=DB.customers.filter(c=>c.id!==id); DB.sites=DB.sites.filter(s=>s.customerId!==id); DB.rates=DB.rates.filter(r=>r.customerId!==id); save(); renderCustomers(); } }
 
 /* Sites */
@@ -998,11 +1112,11 @@ function siteModal(id){
     </div>`,
     `<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" onclick="saveSite('${id||''}')">Save</button>`);
 }
-function saveSite(id){ const o={name:val('s_name'),customerId:val('s_cust'),address:val('s_addr')};
+function saveSite(id){ if(!guardEdit())return; const o={name:val('s_name'),customerId:val('s_cust'),address:val('s_addr')};
   if(!o.name)return toast('Name required','err');
   if(id){Object.assign(site(id),o);}else{DB.sites.push({id:uid('s'),...o});}
   save();closeModal();toast('Site saved','ok');renderSites(); }
-function delSite(id){ if(confirm('Delete site?')){ DB.sites=DB.sites.filter(s=>s.id!==id); save(); renderSites(); } }
+function delSite(id){ if(!guardEdit())return; if(confirm('Delete site?')){ DB.sites=DB.sites.filter(s=>s.id!==id); save(); renderSites(); } }
 
 /* Vehicles */
 function renderVehicles(){
@@ -1022,11 +1136,11 @@ function vehModal(id){
     </div>`,
     `<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" onclick="saveVeh('${id||''}')">Save</button>`);
 }
-function saveVeh(id){ const o={number:val('v_num'),driver:val('v_drv'),driverPhone:val('v_ph'),capacity:val('v_cap')};
+function saveVeh(id){ if(!guardEdit())return; const o={number:val('v_num'),driver:val('v_drv'),driverPhone:val('v_ph'),capacity:val('v_cap')};
   if(!o.number)return toast('Vehicle number required','err');
   if(id){Object.assign(vehicle(id),o);}else{DB.vehicles.push({id:uid('v'),...o});}
   save();closeModal();toast('Vehicle saved','ok');renderVehicles(); }
-function delVeh(id){ if(confirm('Delete vehicle?')){ DB.vehicles=DB.vehicles.filter(v=>v.id!==id); save(); renderVehicles(); } }
+function delVeh(id){ if(!guardEdit())return; if(confirm('Delete vehicle?')){ DB.vehicles=DB.vehicles.filter(v=>v.id!==id); save(); renderVehicles(); } }
 
 /* Grades */
 function renderGrades(){
@@ -1036,20 +1150,32 @@ function renderGrades(){
     `<table class="table"><thead><tr><th>Grade</th><th>HSN/SAC</th><th>GST Rate</th><th class="right"></th></tr></thead><tbody>${rows}</tbody></table>`);
 }
 function gradeModal(id){
-  const g=id?grade(id):{name:'',hsn:'38245010',gst:18};
+  const g=id?grade(id):{name:'',hsn:'38245010',gst:18,mix:{...DEFAULT_MIX}};
+  const m=g.mix||{...DEFAULT_MIX};
   modal((id?'Edit':'Add')+' Grade',
     `<div class="form-grid">
       <div class="field"><label>Grade Name *</label><input id="g_name" value="${g.name||''}" placeholder="M-30"></div>
       <div class="field"><label>HSN/SAC</label><input id="g_hsn" value="${g.hsn||'38245010'}"></div>
       <div class="field"><label>GST Rate (%)</label><input id="g_gst" type="number" value="${g.gst!=null?g.gst:18}"></div>
+    </div>
+    <label style="display:block;margin:14px 0 6px">Mix Design — per Cubic Metre (used on batching slips)</label>
+    <div class="form-grid">
+      <div class="field"><label>Cement (kg)</label><input id="g_cement" type="number" step="0.1" value="${m.cement!=null?m.cement:''}"></div>
+      <div class="field"><label>Sand (kg)</label><input id="g_sand" type="number" step="0.1" value="${m.sand!=null?m.sand:''}"></div>
+      <div class="field"><label>Aggregate 20mm (kg)</label><input id="g_agg20" type="number" step="0.1" value="${m.agg20!=null?m.agg20:''}"></div>
+      <div class="field"><label>Aggregate 12mm (kg)</label><input id="g_agg12" type="number" step="0.1" value="${m.agg12!=null?m.agg12:''}"></div>
+      <div class="field"><label>Water (ltr)</label><input id="g_water" type="number" step="0.1" value="${m.water!=null?m.water:''}"></div>
+      <div class="field"><label>Admixture (ltr)</label><input id="g_admix" type="number" step="0.01" value="${m.admix!=null?m.admix:''}"></div>
     </div>`,
     `<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" onclick="saveGrade('${id||''}')">Save</button>`);
 }
-function saveGrade(id){ const o={name:val('g_name'),hsn:val('g_hsn'),gst:parseFloat(val('g_gst'))||18};
+function saveGrade(id){ if(!guardEdit())return;
+  const o={name:val('g_name'),hsn:val('g_hsn'),gst:parseFloat(val('g_gst'))||18,
+    mix:{cement:Number(val('g_cement'))||0,sand:Number(val('g_sand'))||0,agg20:Number(val('g_agg20'))||0,agg12:Number(val('g_agg12'))||0,water:Number(val('g_water'))||0,admix:Number(val('g_admix'))||0}};
   if(!o.name)return toast('Grade name required','err');
   if(id){Object.assign(grade(id),o);}else{DB.grades.push({id:uid('g'),...o});}
   save();closeModal();toast('Grade saved','ok');renderGrades(); }
-function delGrade(id){ if(confirm('Delete grade?')){ DB.grades=DB.grades.filter(g=>g.id!==id); save(); renderGrades(); } }
+function delGrade(id){ if(!guardEdit())return; if(confirm('Delete grade?')){ DB.grades=DB.grades.filter(g=>g.id!==id); save(); renderGrades(); } }
 
 /* Rates */
 function renderRates(){
@@ -1069,12 +1195,12 @@ function rateModal(id){
     </div>`,
     `<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" onclick="saveRate('${id||''}')">Save</button>`);
 }
-function saveRate(id){ const o={customerId:val('rt_cust'),gradeId:val('rt_grade'),rate:parseFloat(val('rt_rate'))||0};
+function saveRate(id){ if(!guardEdit())return; const o={customerId:val('rt_cust'),gradeId:val('rt_grade'),rate:parseFloat(val('rt_rate'))||0};
   if(!o.rate)return toast('Rate required','err');
   const dup=DB.rates.find(r=>r.customerId===o.customerId&&r.gradeId===o.gradeId&&r.id!==id);
   if(dup){ dup.rate=o.rate; } else if(id){Object.assign(DB.rates.find(x=>x.id===id),o);}else{DB.rates.push({id:uid('r'),...o});}
   save();closeModal();toast('Rate saved','ok');renderRates(); }
-function delRate(id){ if(confirm('Delete rate?')){ DB.rates=DB.rates.filter(r=>r.id!==id); save(); renderRates(); } }
+function delRate(id){ if(!guardEdit())return; if(confirm('Delete rate?')){ DB.rates=DB.rates.filter(r=>r.id!==id); save(); renderRates(); } }
 
 /* ---------------- Reports ---------------- */
 function renderReports(){
@@ -1097,6 +1223,7 @@ function renderReports(){
     `<div class="toolbar">
       <button class="btn ghost" onclick="exportInvoicesCSV()">⬇ All Invoices (Excel/CSV)</button>
       <button class="btn ghost" onclick="exportMonthlyCSV()">⬇ Monthly Summary (CSV)</button>
+      <button class="btn ghost" onclick="zipModal()">🗜 Bulk Invoice ZIP</button>
     </div>
     <div class="card" style="margin-bottom:16px"><div class="hd"><h3>Customer Statement &amp; Toll Register</h3></div><div class="bd">
       <div class="toolbar" style="margin:0">
@@ -1361,7 +1488,7 @@ function saveLead(id){
 function delLead(id){ if(confirm('Delete lead?')){ DB.leads=DB.leads.filter(l=>l.id!==id); save(); renderLeads(); } }
 
 /* ---- Users & Permissions ---- */
-const PERM_LABELS={dashboard:'Dashboard',newinvoice:'New Bill',invoices:'Invoices',payments:'Outstanding',inventory:'Product Inventory',staff:'Staff Attendance',leads:'Leads',concalc:'Concrete Calc',revenue:'Revenue Calc',customers:'Customers',sites:'Sites',vehicles:'Vehicles',grades:'Grades',rates:'Rates',reports:'Reports',users:'Users',settings:'Settings'};
+const PERM_LABELS={dashboard:'Dashboard',newinvoice:'New Bill',invoices:'Invoices',payments:'Outstanding',inventory:'Product Inventory',vendors:'Vendors & Purchases',staff:'Staff Attendance',payroll:'Salary / Payroll',leads:'Leads',concalc:'Concrete Calc',revenue:'Revenue Calc',customers:'Customers',sites:'Sites',vehicles:'Vehicles',grades:'Grades',rates:'Rates',reports:'Reports',activity:'Activity Log',users:'Users',settings:'Settings'};
 function renderUsers(){
   const users=DB.users||[];
   document.getElementById('main').innerHTML=topbar('Users & Permissions','Create staff logins and control what each person can access',
@@ -1408,7 +1535,7 @@ function renderInventory(){
   const value=prods.reduce((s,p)=>s+(p.stock*(p.rate||0)),0);
   document.getElementById('main').innerHTML=
     topbar('Product Inventory','Raw materials &amp; stock &mdash; cement, aggregate, admixtures and more',
-      `<button class="btn gold" onclick="prodModal()">➕ Add Product</button>`)+
+      canEdit()?`<button class="btn gold" onclick="prodModal()">➕ Add Product</button>`:'')+
     `<div class="grid kpis" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">
       <div class="kpi blue"><div class="lab">Products</div><div class="val">${prods.length}</div><div class="sub">stock items tracked</div></div>
       <div class="kpi red"><div class="lab">Low Stock</div><div class="val">${low.length}</div><div class="sub">at / below reorder level</div></div>
@@ -1467,6 +1594,7 @@ function prCatToggle(){
   if(w) w.style.display = (document.getElementById('pr_cat').value==='Other') ? 'block' : 'none';
 }
 function saveProd(id){
+  if(!guardEdit())return;
   let category=val('pr_cat');
   if(category==='Other'){ const other=val('pr_catother'); if(!other) return toast('Please specify the category','err'); category=other; }
   const o={name:val('pr_name'),category,unit:val('pr_unit'),
@@ -1475,7 +1603,7 @@ function saveProd(id){
   if(id){ Object.assign(product(id),o); } else { DB.products.push({id:uid('p'),...o}); }
   save(); closeModal(); toast('Product saved','ok'); renderInventory();
 }
-function delProd(id){ if(confirm('Delete this product?')){ DB.products=DB.products.filter(p=>p.id!==id); save(); renderInventory(); } }
+function delProd(id){ if(!guardEdit())return; if(confirm('Delete this product?')){ DB.products=DB.products.filter(p=>p.id!==id); save(); renderInventory(); } }
 function moveModal(type,id){
   const p=product(id);
   modal((type==='in'?'Stock In — ':'Stock Out — ')+p.name,
@@ -1489,11 +1617,13 @@ function moveModal(type,id){
      <button class="btn ${type==='in'?'green':''}" onclick="saveMove('${type}','${id}')">${type==='in'?'Add to Stock':'Remove from Stock'}</button>`);
 }
 function saveMove(type,id){
+  if(!guardEdit())return;
   const p=product(id); const qty=Number(val('mv_qty'))||0;
   if(qty<=0)return toast('Enter a valid quantity','err');
   if(type==='out' && qty>p.stock && !confirm('Quantity exceeds current stock — record anyway (stock will go negative)?')) return;
   p.stock = round2(type==='in' ? p.stock+qty : p.stock-qty);
-  DB.stockmoves.push({id:uid('sm'),productId:id,type,qty,date:val('mv_date')||todayISO(),note:val('mv_note')});
+  DB.stockmoves.push({id:uid('sm'),productId:id,type,qty,date:val('mv_date')||todayISO(),note:val('mv_note'),at:nowStamp(),by:(ME&&ME.name)||''});
+  logAct('Stock '+(type==='in'?'in':'out'),p.name+' — '+qty+' '+(p.unit||''));
   save(); closeModal(); toast('Stock '+(type==='in'?'added':'removed'),'ok'); renderInventory();
 }
 function exportInventoryCSV(){
@@ -1512,7 +1642,7 @@ function renderStaff(){
   staffDate=staffDate||todayISO();
   document.getElementById('main').innerHTML=
     topbar('Staff Attendance','Mark daily attendance and view the monthly summary',
-      `<button class="btn gold" onclick="staffModal()">➕ Add Staff</button>`)+
+      canEdit()?`<button class="btn gold" onclick="staffModal()">➕ Add Staff</button>`:'')+
     `<div class="toolbar">
       <label style="font-size:12px;color:var(--muted)">Date</label>
       <input type="date" id="staffDate" value="${staffDate}" onchange="staffDate=this.value;renderStaff()" style="max-width:170px">
@@ -1549,40 +1679,404 @@ function drawStaff(){
     : '';
 }
 function markAtt(staffId,status){
+  if(!guardEdit())return;
   const a=attFor(staffId,staffDate);
   if(a){ a.status = a.status===status ? '' : status; if(!a.status){ DB.attendance=DB.attendance.filter(x=>x!==a); } }
   else { DB.attendance.push({id:uid('at'),staffId,date:staffDate,status}); }
   save(); drawStaff();
 }
 function markAllPresent(){
+  if(!guardEdit())return;
   (DB.staff||[]).filter(s=>s.active!==false).forEach(s=>{ if(!attFor(s.id,staffDate)) DB.attendance.push({id:uid('at'),staffId:s.id,date:staffDate,status:'P'}); else attFor(s.id,staffDate).status='P'; });
   save(); toast('All marked present','ok'); drawStaff();
 }
 function staffModal(id){
-  const s=id?staffById(id):{name:'',role:'',phone:'',wage:'',active:true};
+  const s=id?staffById(id):{name:'',role:'',phone:'',wage:'',monthlySalary:'',joinDate:'',leaveAllowed:2,active:true};
   modal((id?'Edit':'Add')+' Staff',
     `<div class="form-grid">
       <div class="field"><label>Name *</label><input id="sf_name" value="${s.name||''}"></div>
-      <div class="field"><label>Role / Designation</label><input id="sf_role" value="${s.role||''}" placeholder="Driver / Operator / Loader"></div>
+      <div class="field"><label>Designation</label><input id="sf_role" value="${s.role||''}" placeholder="Driver / Operator / Loader"></div>
       <div class="field"><label>Phone</label><input id="sf_phone" value="${s.phone||''}"></div>
-      <div class="field"><label>Wage per day (₹)</label><input id="sf_wage" type="number" value="${s.wage!==''?s.wage:''}"></div>
-      <div class="field full"><label>Status</label><select id="sf_active"><option value="1" ${s.active!==false?'selected':''}>Active</option><option value="0" ${s.active===false?'selected':''}>Inactive</option></select></div>
+      <div class="field"><label>Joining Date</label><input id="sf_join" type="date" value="${s.joinDate||''}"></div>
+      <div class="field"><label>Monthly Salary (₹)</label><input id="sf_msal" type="number" value="${s.monthlySalary!==''&&s.monthlySalary!=null?s.monthlySalary:''}"></div>
+      <div class="field"><label>Wage per day (₹)</label><input id="sf_wage" type="number" value="${s.wage!==''&&s.wage!=null?s.wage:''}"></div>
+      <div class="field"><label>Paid Leave / month (days)</label><input id="sf_leave" type="number" step="0.5" value="${s.leaveAllowed!=null?s.leaveAllowed:2}"></div>
+      <div class="field"><label>Status</label><select id="sf_active"><option value="1" ${s.active!==false?'selected':''}>Active</option><option value="0" ${s.active===false?'selected':''}>Inactive</option></select></div>
     </div>`,
     `<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" onclick="saveStaff('${id||''}')">Save</button>`);
 }
 function saveStaff(id){
-  const o={name:val('sf_name'),role:val('sf_role'),phone:val('sf_phone'),wage:Number(val('sf_wage'))||0,active:val('sf_active')==='1'};
+  if(!guardEdit())return;
+  const o={name:val('sf_name'),role:val('sf_role'),phone:val('sf_phone'),wage:Number(val('sf_wage'))||0,
+    monthlySalary:Number(val('sf_msal'))||0,joinDate:val('sf_join'),leaveAllowed:Number(val('sf_leave'))||0,active:val('sf_active')==='1'};
   if(!o.name)return toast('Name required','err');
   if(id){ Object.assign(staffById(id),o); } else { DB.staff.push({id:uid('st'),...o}); }
   save(); closeModal(); toast('Staff saved','ok'); renderStaff();
 }
-function delStaff(id){ if(confirm('Delete this staff member?')){ DB.staff=DB.staff.filter(s=>s.id!==id); save(); renderStaff(); } }
+function delStaff(id){ if(!guardEdit())return; if(confirm('Delete this staff member?')){ DB.staff=DB.staff.filter(s=>s.id!==id); save(); renderStaff(); } }
 function exportAttendanceCSV(){
   const ym=staffDate.slice(0,7);
   const rows=[['Staff','Role','Month','Present','Absent','Half-day','Leave','Payable Days']];
   (DB.staff||[]).forEach(s=>{const P=attCount(s.id,ym,'P'),A=attCount(s.id,ym,'A'),H=attCount(s.id,ym,'H'),L=attCount(s.id,ym,'L');
     rows.push([s.name,s.role,monthName(ym),P,A,H,L,(P+H*0.5).toFixed(1)]);});
   downloadCSV('DNK_Attendance_'+ym+'.csv',rows);
+}
+
+/* ================= SALARY / PAYROLL ================= */
+let payMonth=todayISO().slice(0,7);
+function advTotal(staffId,ym){ return (DB.advances||[]).filter(a=>a.staffId===staffId&&a.date.slice(0,7)===ym).reduce((s,a)=>s+(+a.amount||0),0); }
+function salaryRecord(staffId,ym){ return (DB.salaryRecords||[]).find(r=>r.staffId===staffId&&r.month===ym); }
+function computePay(s,ym){
+  const P=attCount(s.id,ym,'P'),A=attCount(s.id,ym,'A'),H=attCount(s.id,ym,'H'),L=attCount(s.id,ym,'L');
+  const gross=+s.monthlySalary||0;
+  const allowed=+s.leaveAllowed||0;
+  const lopDays=round2(Math.max(0,(A+L)-allowed)+H*0.5);   // unpaid days beyond eligible leave (+ half-days)
+  const perDay=round2(gross/30);                            // 30-day salary basis
+  const lop=round2(perDay*lopDays);
+  const adv=advTotal(s.id,ym);
+  const net=round2(gross-lop-adv);
+  return {P,A,H,L,gross,allowed,lopDays,perDay,lop,adv,net};
+}
+function renderPayroll(){
+  payMonth=payMonth||todayISO().slice(0,7);
+  const staff=(DB.staff||[]).filter(s=>s.active!==false);
+  const ym=payMonth;
+  let totGross=0,totLop=0,totAdv=0,totNet=0;
+  staff.forEach(s=>{const c=computePay(s,ym);totGross+=c.gross;totLop+=c.lop;totAdv+=c.adv;totNet+=c.net;});
+  document.getElementById('main').innerHTML=
+    topbar('Salary / Payroll','Monthly salary — auto LOP for excess leave, less advances = net payable')+
+    `<div class="toolbar">
+      <label style="font-size:12px;color:var(--muted)">Month</label>
+      <input type="month" id="payMonth" value="${ym}" onchange="payMonth=this.value;renderPayroll()" style="max-width:180px">
+      <button class="btn ghost" onclick="exportPayrollCSV()">⬇ Payroll CSV</button>
+    </div>
+    <div class="grid kpis" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px">
+      <div class="kpi blue"><div class="lab">Gross (Month)</div><div class="val">₹${inr(totGross)}</div><div class="sub">${staff.length} staff</div></div>
+      <div class="kpi red"><div class="lab">LOP Deduction</div><div class="val">₹${inr(totLop)}</div></div>
+      <div class="kpi accent"><div class="lab">Advances Paid</div><div class="val">₹${inr(totAdv)}</div></div>
+      <div class="kpi green"><div class="lab">Net Payable</div><div class="val">₹${inr(totNet)}</div></div>
+    </div>
+    <div class="card"><div class="hd"><h3>Salary Sheet — ${monthName(ym)}</h3></div><div class="bd" style="padding:0" id="payTbl"></div></div>`;
+  drawPayroll();
+}
+function drawPayroll(){
+  const staff=(DB.staff||[]).filter(s=>s.active!==false);
+  const ym=payMonth;
+  document.getElementById('payTbl').innerHTML = staff.length?
+    `<table class="table"><thead><tr><th>Staff</th><th class="num">Gross</th><th class="num" title="Present">P</th><th class="num" title="Absent">A</th><th class="num" title="Half-day">H</th><th class="num" title="Leave">L</th><th class="num">LOP Days</th><th class="num">LOP ₹</th><th class="num">Advances</th><th class="num">Net Payable</th><th class="right">Actions</th></tr></thead><tbody>`+
+    staff.map(s=>{const c=computePay(s,ym);const done=salaryRecord(s.id,ym);
+      return `<tr><td><b>${s.name}</b><br><span class="muted" style="font-size:11px">${s.role||''}</span></td>
+        <td class="num">₹${inr(c.gross)}</td>
+        <td class="num">${c.P}</td><td class="num">${c.A}</td><td class="num">${c.H}</td><td class="num">${c.L}</td>
+        <td class="num">${c.lopDays.toFixed(1)}</td><td class="num">₹${inr(c.lop)}</td>
+        <td class="num">₹${inr(c.adv)}</td><td class="num"><b>₹${inr(c.net)}</b> ${done?'<span class="pill paid">Processed</span>':''}</td>
+        <td class="right">
+          ${canEdit()?`<button class="btn ghost sm" onclick="advanceModal('${s.id}')">➕ Advance</button>`:''}
+          <button class="btn ghost sm" onclick="printPayslip('${s.id}')">🧾 Payslip</button>
+          ${canEdit()?`<button class="btn green sm" onclick="processSalary('${s.id}')">✔ Process</button>`:''}
+        </td></tr>`;}).join('')+`</tbody></table>`
+    : `<div class="empty">No active staff. Add staff in the Staff Attendance screen.</div>`;
+}
+function advanceModal(id){
+  const s=staffById(id);
+  modal('Salary Advance — '+s.name,
+    `<div class="muted" style="margin-bottom:10px;font-size:12px">Advances this month (${monthName(payMonth)}): <b>₹${inr(advTotal(id,payMonth))}</b></div>
+     <div class="form-grid">
+      <div class="field"><label>Amount (₹) *</label><input id="av_amt" type="number" step="0.01" placeholder="e.g. 2000"></div>
+      <div class="field"><label>Date</label><input id="av_date" type="date" value="${todayISO()}"></div>
+      <div class="field full"><label>Note</label><input id="av_note" placeholder="Weekly advance / reason"></div>
+     </div>
+     <div id="av_list" style="margin-top:12px">${advListHTML(id)}</div>`,
+    `<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn green" onclick="saveAdvance('${id}')">Add Advance</button>`);
+}
+function advListHTML(id){
+  const list=(DB.advances||[]).filter(a=>a.staffId===id&&a.date.slice(0,7)===payMonth).sort((a,b)=>a.date.localeCompare(b.date));
+  if(!list.length) return '<div class="muted" style="font-size:12px">No advances recorded this month.</div>';
+  return `<table class="table"><thead><tr><th>Date</th><th>Note</th><th class="num">Amount</th><th class="right"></th></tr></thead><tbody>`+
+    list.map(a=>`<tr><td>${fmtDate(a.date)}</td><td>${a.note||''}</td><td class="num">₹${inr(a.amount)}</td>
+      <td class="right">${canEdit()?`<button class="btn danger sm" onclick="delAdvance('${a.id}')">✕</button>`:''}</td></tr>`).join('')+`</tbody></table>`;
+}
+function saveAdvance(id){
+  if(!guardEdit())return;
+  const amt=Number(val('av_amt'))||0;
+  if(amt<=0)return toast('Enter a valid amount','err');
+  DB.advances=DB.advances||[];
+  DB.advances.push({id:uid('ad'),staffId:id,date:val('av_date')||todayISO(),amount:amt,note:val('av_note'),at:nowStamp()});
+  logAct('Salary advance',(staffById(id).name||'')+' — ₹'+inr(amt));
+  save(); toast('Advance recorded','ok');
+  document.getElementById('av_list').innerHTML=advListHTML(id);
+  const d=document.getElementById('av_amt'); if(d){d.value='';}
+}
+function delAdvance(id){
+  if(!guardEdit())return;
+  const a=(DB.advances||[]).find(x=>x.id===id); if(!a)return;
+  DB.advances=DB.advances.filter(x=>x.id!==id); save();
+  const box=document.getElementById('av_list'); if(box) box.innerHTML=advListHTML(a.staffId);
+  drawPayroll();
+}
+function processSalary(id){
+  if(!guardEdit())return;
+  const s=staffById(id); const ym=payMonth; const c=computePay(s,ym);
+  const existing=salaryRecord(id,ym);
+  const rec={id:existing?existing.id:uid('sr'),staffId:id,staffName:s.name,month:ym,gross:c.gross,
+    present:c.P,absent:c.A,halfday:c.H,leave:c.L,lopDays:c.lopDays,lop:c.lop,advances:c.adv,net:c.net,savedAt:nowStamp(),by:(ME&&ME.name)||''};
+  DB.salaryRecords=DB.salaryRecords||[];
+  if(existing){ Object.assign(existing,rec); } else { DB.salaryRecords.push(rec); }
+  logAct('Salary processed',(s.name||'')+' — '+monthName(ym)+' net ₹'+inr(c.net));
+  save(); toast('Salary processed for '+monthName(ym),'ok'); drawPayroll();
+}
+function printPayslip(id){
+  const s=staffById(id); const ym=payMonth; const c=computePay(s,ym); const co=DB.company;
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>Payslip — ${s.name} ${ym}</title>
+    <style>body{font-family:"Segoe UI",Arial,sans-serif;color:#111;font-size:12px;padding:18px}
+    h2{margin:0}.muted{color:#666}table{border-collapse:collapse;width:100%;margin-top:10px}
+    td,th{border:1px solid #999;padding:5px 8px}.r{text-align:right}th{background:#f0f0f0;text-align:left}
+    .head{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #14508c;padding-bottom:8px}
+    .net{background:#099330;color:#fff;font-weight:700}</style></head><body>
+    <div class="head"><div><h2>${co.name}</h2><div class="muted">${co.addressLines.join(', ')}</div></div>
+      <img src="${window.LOGO_DATA}" style="width:66px;height:66px;object-fit:contain"></div>
+    <h3 style="margin:12px 0 0">Salary Slip — ${monthName(ym)}</h3>
+    <div class="muted">Employee: <b>${s.name}</b> • ${s.role||''} ${s.joinDate?('• Joined '+fmtDate(s.joinDate)):''}</div>
+    <table><tbody>
+      <tr><th>Gross Salary (monthly)</th><td class="r">₹ ${inr(c.gross)}</td></tr>
+      <tr><td>Attendance — P:${c.P} A:${c.A} H:${c.H} L:${c.L} &nbsp; (Paid leave allowed: ${c.allowed})</td><td class="r muted">—</td></tr>
+      <tr><td>Loss of Pay — ${c.lopDays.toFixed(1)} day(s) @ ₹${inr(c.perDay)}/day</td><td class="r">− ₹ ${inr(c.lop)}</td></tr>
+      <tr><td>Advances paid this month</td><td class="r">− ₹ ${inr(c.adv)}</td></tr>
+      <tr class="net"><td>NET PAYABLE</td><td class="r">₹ ${inr(c.net)}</td></tr>
+    </tbody></table>
+    <div class="muted" style="margin-top:8px">${numToWords(c.net)}</div>
+    <div style="margin-top:34px;display:flex;justify-content:space-between"><div>Employee Signature</div><div>For ${co.name}</div></div>
+    <div class="muted" style="margin-top:16px;text-align:center">Computer-generated salary slip • 30-day salary basis.</div>
+    </body></html>`;
+  openPrint(html);
+}
+function exportPayrollCSV(){
+  const ym=payMonth;
+  const rows=[['Staff','Designation','Month','Gross','Present','Absent','Half-day','Leave','LOP Days','LOP Amount','Advances','Net Payable','Status']];
+  (DB.staff||[]).filter(s=>s.active!==false).forEach(s=>{const c=computePay(s,ym);
+    rows.push([s.name,s.role,monthName(ym),c.gross,c.P,c.A,c.H,c.L,c.lopDays,c.lop,c.adv,c.net,salaryRecord(s.id,ym)?'Processed':'Draft']);});
+  downloadCSV('DNK_Payroll_'+ym+'.csv',rows);
+}
+
+/* ================= VENDORS & PURCHASES ================= */
+function vendor(id){ return (DB.vendors||[]).find(v=>v.id===id)||{}; }
+function purchasesFor(vid){ return (DB.purchases||[]).filter(p=>p.vendorId===vid); }
+function renderVendors(){
+  const vends=DB.vendors||[]; const purch=DB.purchases||[];
+  const totVal=purch.reduce((s,p)=>s+(+p.amount||0),0);
+  const totDue=purch.reduce((s,p)=>s+((+p.amount||0)-(+p.paid||0)),0);
+  const actions=canEdit()?`<button class="btn gold" onclick="purchaseModal()">➕ Record Purchase</button>
+     <button class="btn" onclick="vendorModal()">＋ Add Vendor</button>`:'';
+  document.getElementById('main').innerHTML=
+    topbar('Vendors & Purchases','Suppliers of cement, aggregate, sand, admixture — record purchases &amp; dues',actions)+
+    `<div class="grid kpis" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">
+      <div class="kpi blue"><div class="lab">Vendors</div><div class="val">${vends.length}</div></div>
+      <div class="kpi accent"><div class="lab">Total Purchases</div><div class="val">₹${inr(totVal)}</div><div class="sub">${purch.length} entries</div></div>
+      <div class="kpi red"><div class="lab">Payable to Vendors</div><div class="val">₹${inr(totDue)}</div></div>
+    </div>
+    <div class="toolbar"><button class="btn ghost" onclick="exportVendorsCSV()">⬇ Vendors CSV</button>
+      <button class="btn ghost" onclick="exportPurchasesCSV()">⬇ Purchases CSV</button></div>
+    <div class="card" style="margin-bottom:16px"><div class="hd"><h3>Vendors</h3></div><div class="bd" style="padding:0">
+      ${vends.length?`<table class="table"><thead><tr><th>Vendor</th><th>Material</th><th>GSTIN</th><th>Phone</th><th class="num">Purchases</th><th class="num">Value</th><th class="right"></th></tr></thead><tbody>`+
+      vends.map(v=>{const ps=purchasesFor(v.id);const val=ps.reduce((s,p)=>s+(+p.amount||0),0);
+        return `<tr><td><b>${v.name}</b></td><td>${v.material||'-'}</td><td>${v.gstin||'—'}</td><td>${v.phone||'-'}</td>
+        <td class="num">${ps.length}</td><td class="num">₹${inr(val)}</td>
+        <td class="right">${canEdit()?`<button class="btn ghost sm" onclick="vendorModal('${v.id}')">✎</button><button class="btn danger sm" onclick="delVendor('${v.id}')">✕</button>`:''}</td></tr>`;}).join('')+`</tbody></table>`
+      :'<div class="empty">No vendors yet.</div>'}
+    </div></div>
+    <div class="card"><div class="hd"><h3>Purchase Records</h3></div><div class="bd" style="padding:0" id="purchTbl"></div></div>`;
+  drawPurchases();
+}
+function drawPurchases(){
+  const purch=[...(DB.purchases||[])].sort((a,b)=>(b.date+(b.at||'')).localeCompare(a.date+(a.at||'')));
+  document.getElementById('purchTbl').innerHTML = purch.length?
+    `<table class="table"><thead><tr><th>Date / Time</th><th>Vendor</th><th>Material</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th><th class="num">Paid</th><th class="num">Due</th><th>Bill No</th><th class="right">Actions</th></tr></thead><tbody>`+
+    purch.map(p=>{const v=vendor(p.vendorId);const pr=product(p.productId);const due=round2((+p.amount||0)-(+p.paid||0));
+      return `<tr><td>${fmtDate(p.date)}<br><span class="muted" style="font-size:10px">${p.at||''}</span></td>
+        <td>${v.name||'-'}</td><td>${pr.name||p.material||'-'}</td>
+        <td class="num">${p.qty}</td><td class="num">₹${inr(p.rate)}</td><td class="num"><b>₹${inr(p.amount)}</b></td>
+        <td class="num">₹${inr(p.paid||0)}</td><td class="num">${due>0.5?'₹'+inr(due):'—'}</td><td>${p.billNo||'-'}</td>
+        <td class="right">${canEdit()&&due>0.5?`<button class="btn green sm" onclick="payPurchaseModal('${p.id}')">💰 Pay</button>`:''}${canEdit()?`<button class="btn danger sm" onclick="delPurchase('${p.id}')">✕</button>`:''}</td></tr>`;}).join('')+`</tbody></table>`
+    : `<div class="empty">No purchases recorded yet.</div>`;
+}
+function vendorModal(id){
+  const v=id?vendor(id):{name:'',gstin:'',phone:'',material:'',address:''};
+  modal((id?'Edit':'Add')+' Vendor',
+    `<div class="form-grid">
+      <div class="field full"><label>Vendor Name *</label><input id="vn_name" value="${v.name||''}"></div>
+      <div class="field"><label>Material Supplied</label><input id="vn_mat" value="${v.material||''}" placeholder="Cement / Aggregate / Sand"></div>
+      <div class="field"><label>GSTIN</label><input id="vn_gstin" value="${v.gstin||''}"></div>
+      <div class="field"><label>Phone</label><input id="vn_phone" value="${v.phone||''}"></div>
+      <div class="field full"><label>Address</label><textarea id="vn_addr" rows="2">${v.address||''}</textarea></div>
+    </div>`,
+    `<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" onclick="saveVendor('${id||''}')">Save</button>`);
+}
+function saveVendor(id){
+  if(!guardEdit())return;
+  const o={name:val('vn_name'),material:val('vn_mat'),gstin:val('vn_gstin'),phone:val('vn_phone'),address:val('vn_addr')};
+  if(!o.name)return toast('Vendor name required','err');
+  DB.vendors=DB.vendors||[];
+  if(id){Object.assign(vendor(id),o);}else{DB.vendors.push({id:uid('vn'),...o});}
+  logAct(id?'Vendor updated':'Vendor added',o.name);
+  save();closeModal();toast('Vendor saved','ok');renderVendors();
+}
+function delVendor(id){
+  if(!guardEdit())return;
+  if(purchasesFor(id).length)return toast('Cannot delete — vendor has purchase records','err');
+  if(confirm('Delete vendor?')){ DB.vendors=DB.vendors.filter(v=>v.id!==id); save(); renderVendors(); }
+}
+function purchaseModal(id){
+  const p=id?(DB.purchases||[]).find(x=>x.id===id):{vendorId:'',productId:'',qty:'',rate:'',date:todayISO(),billNo:'',paid:''};
+  const vopts=(DB.vendors||[]).map(v=>`<option value="${v.id}" ${v.id===p.vendorId?'selected':''}>${v.name}</option>`).join('');
+  const popts=(DB.products||[]).map(pr=>`<option value="${pr.id}" ${pr.id===p.productId?'selected':''}>${pr.name} (${pr.unit})</option>`).join('');
+  modal((id?'Edit':'Record')+' Purchase',
+    `<div class="form-grid">
+      <div class="field"><label>Vendor *</label><select id="pu_vendor"><option value="">— Select Vendor —</option>${vopts}</select></div>
+      <div class="field"><label>Product (adds to stock)</label><select id="pu_product"><option value="">— None / other —</option>${popts}</select></div>
+      <div class="field"><label>Quantity *</label><input id="pu_qty" type="number" step="0.01" oninput="puCalc()" value="${p.qty!==''&&p.qty!=null?p.qty:''}"></div>
+      <div class="field"><label>Rate (₹) *</label><input id="pu_rate" type="number" step="0.01" oninput="puCalc()" value="${p.rate!==''&&p.rate!=null?p.rate:''}"></div>
+      <div class="field"><label>Amount (₹)</label><input id="pu_amount" type="number" step="0.01" value="${p.amount!=null?p.amount:''}" readonly></div>
+      <div class="field"><label>Amount Paid (₹)</label><input id="pu_paid" type="number" step="0.01" value="${p.paid!==''&&p.paid!=null?p.paid:''}"></div>
+      <div class="field"><label>Bill / Invoice No</label><input id="pu_bill" value="${p.billNo||''}"></div>
+      <div class="field"><label>Date</label><input id="pu_date" type="date" value="${p.date||todayISO()}"></div>
+    </div>`,
+    `<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn green" onclick="savePurchase('${id||''}')">Save Purchase</button>`);
+  puCalc();
+}
+function puCalc(){ const q=Number(val('pu_qty'))||0,r=Number(val('pu_rate'))||0; const a=document.getElementById('pu_amount'); if(a)a.value=round2(q*r); }
+function savePurchase(id){
+  if(!guardEdit())return;
+  const vendorId=val('pu_vendor'), productId=val('pu_product');
+  const qty=Number(val('pu_qty'))||0, rate=Number(val('pu_rate'))||0, amount=round2(qty*rate), paid=Number(val('pu_paid'))||0;
+  if(!vendorId)return toast('Select a vendor','err');
+  if(qty<=0||rate<=0)return toast('Enter quantity and rate','err');
+  const o={vendorId,productId,qty,rate,amount,paid,billNo:val('pu_bill'),date:val('pu_date')||todayISO()};
+  DB.purchases=DB.purchases||[];
+  if(id){ Object.assign((DB.purchases).find(x=>x.id===id),o); }
+  else{
+    o.id=uid('pu'); o.at=nowStamp();
+    DB.purchases.push(o);
+    if(productId){ const pr=product(productId); if(pr&&pr.id){ pr.stock=round2((pr.stock||0)+qty);
+      DB.stockmoves.push({id:uid('sm'),productId,type:'in',qty,date:o.date,note:'Purchase — '+(vendor(vendorId).name||''),at:nowStamp(),by:(ME&&ME.name)||''}); } }
+  }
+  logAct('Purchase recorded',(vendor(vendorId).name||'')+' — ₹'+inr(amount)+(productId?(' ('+(product(productId).name||'')+')'):''));
+  save();closeModal();toast('Purchase recorded','ok');renderVendors();
+}
+function delPurchase(id){
+  if(!guardEdit())return;
+  if(confirm('Delete this purchase record?')){ DB.purchases=DB.purchases.filter(p=>p.id!==id); save(); renderVendors(); }
+}
+function payPurchaseModal(id){
+  const p=(DB.purchases||[]).find(x=>x.id===id); const due=round2((+p.amount||0)-(+p.paid||0));
+  modal('Pay Vendor — '+(vendor(p.vendorId).name||''),
+    `<div class="calc"><div class="row"><span>Purchase Amount</span><span>₹ ${inr(p.amount)}</span></div>
+     <div class="row"><span>Already Paid</span><span>₹ ${inr(p.paid||0)}</span></div>
+     <div class="row total"><span>Due</span><span>₹ ${inr(due)}</span></div></div>
+     <div class="field" style="margin-top:14px"><label>Amount paying now (₹)</label><input id="pp_amt" type="number" step="0.01" value="${due.toFixed(2)}"></div>`,
+    `<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn green" onclick="doPayPurchase('${id}')">Save Payment</button>`);
+}
+function doPayPurchase(id){
+  if(!guardEdit())return;
+  const amt=Number(val('pp_amt'))||0; const p=(DB.purchases||[]).find(x=>x.id===id);
+  p.paid=round2((+p.paid||0)+amt); if(p.paid<0)p.paid=0;
+  logAct('Vendor payment',(vendor(p.vendorId).name||'')+' — ₹'+inr(amt));
+  save();closeModal();toast('Vendor payment recorded','ok');renderVendors();
+}
+function exportVendorsCSV(){
+  const rows=[['Vendor','Material','GSTIN','Phone','Address','Purchases','Total Value','Total Paid','Balance Due']];
+  (DB.vendors||[]).forEach(v=>{const ps=purchasesFor(v.id);const val=ps.reduce((s,p)=>s+(+p.amount||0),0);const paid=ps.reduce((s,p)=>s+(+p.paid||0),0);
+    rows.push([v.name,v.material,v.gstin,v.phone,(v.address||'').replace(/\n/g,', '),ps.length,val,paid,round2(val-paid)]);});
+  downloadCSV('DNK_Vendors_'+todayISO()+'.csv',rows);
+}
+function exportPurchasesCSV(){
+  const rows=[['Date','Time','Vendor','Material/Product','Qty','Rate','Amount','Paid','Due','Bill No']];
+  [...(DB.purchases||[])].sort((a,b)=>a.date.localeCompare(b.date)).forEach(p=>{const v=vendor(p.vendorId);const pr=product(p.productId);
+    rows.push([p.date,p.at||'',v.name||'',pr.name||p.material||'',p.qty,p.rate,p.amount,p.paid||0,round2((+p.amount||0)-(+p.paid||0)),p.billNo||'']);});
+  downloadCSV('DNK_Purchases_'+todayISO()+'.csv',rows);
+}
+
+/* ================= ACTIVITY LOG (audit trail) ================= */
+let actSearch='';
+function renderActivity(){
+  document.getElementById('main').innerHTML=
+    topbar('Activity Log','Audit trail — who did what, timestamped',
+      canEdit()?`<button class="btn ghost" onclick="clearActivity()">Clear log</button>`:'')+
+    `<div class="toolbar">
+      <input class="search" id="actSearch" placeholder="🔍 Search user, action or detail…" value="${actSearch}" oninput="actSearch=this.value;drawActivity()">
+      <button class="btn ghost" onclick="exportActivityCSV()">⬇ Activity CSV</button>
+    </div>
+    <div class="card"><div class="bd" style="padding:0" id="actTbl"></div></div>`;
+  drawActivity();
+}
+function drawActivity(){
+  const q=actSearch.toLowerCase();
+  const list=[...(DB.activity||[])].reverse()
+    .filter(a=>!q||[a.user,a.role,a.action,a.detail].join(' ').toLowerCase().includes(q))
+    .slice(0,400);
+  document.getElementById('actTbl').innerHTML = list.length?
+    `<table class="table"><thead><tr><th>Date / Time</th><th>User</th><th>Role</th><th>Action</th><th>Details</th></tr></thead><tbody>`+
+    list.map(a=>`<tr><td style="white-space:nowrap">${a.at||''}</td><td><b>${a.user||''}</b></td><td>${a.role||''}</td>
+      <td>${a.action||''}</td><td>${a.detail||''}</td></tr>`).join('')+`</tbody></table>`
+    : `<div class="empty">No activity recorded yet.</div>`;
+}
+function clearActivity(){
+  if(!guardEdit())return;
+  if(confirm('Clear the entire activity log? This cannot be undone.')){ DB.activity=[]; logAct('Activity log cleared',''); save(); renderActivity(); }
+}
+function exportActivityCSV(){
+  const rows=[['Date/Time','User','Role','Action','Details']];
+  [...(DB.activity||[])].forEach(a=>rows.push([a.at,a.user,a.role,a.action,a.detail]));
+  downloadCSV('DNK_ActivityLog_'+todayISO()+'.csv',rows);
+}
+
+/* ================= BULK INVOICE DOWNLOAD (ZIP) ================= */
+const _crcTable=(()=>{ let c,t=[]; for(let n=0;n<256;n++){ c=n; for(let k=0;k<8;k++) c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1); t[n]=c>>>0; } return t; })();
+function crc32bytes(b){ let c=0xFFFFFFFF; for(let i=0;i<b.length;i++) c=_crcTable[(c^b[i])&0xFF]^(c>>>8); return (c^0xFFFFFFFF)>>>0; }
+function _u16(n){ return [n&0xFF,(n>>>8)&0xFF]; }
+function _u32(n){ return [n&0xFF,(n>>>8)&0xFF,(n>>>16)&0xFF,(n>>>24)&0xFF]; }
+function makeZip(files){   // files: [{name, data}] — store method (no compression)
+  const enc=new TextEncoder(); const fileParts=[], central=[]; let offset=0;
+  files.forEach(f=>{
+    const nameB=enc.encode(f.name), dataB=enc.encode(f.data), crc=crc32bytes(dataB);
+    const local=[].concat(_u32(0x04034b50),_u16(20),_u16(0),_u16(0),_u16(0),_u16(0),_u32(crc),_u32(dataB.length),_u32(dataB.length),_u16(nameB.length),_u16(0));
+    fileParts.push(Uint8Array.from(local),nameB,dataB);
+    const cen=[].concat(_u32(0x02014b50),_u16(20),_u16(20),_u16(0),_u16(0),_u16(0),_u16(0),_u32(crc),_u32(dataB.length),_u32(dataB.length),_u16(nameB.length),_u16(0),_u16(0),_u16(0),_u16(0),_u32(0),_u32(offset));
+    central.push(Uint8Array.from(cen),nameB);
+    offset+=local.length+nameB.length+dataB.length;
+  });
+  let centralLen=0; central.forEach(p=>centralLen+=p.length);
+  const end=Uint8Array.from([].concat(_u32(0x06054b50),_u16(0),_u16(0),_u16(files.length),_u16(files.length),_u32(centralLen),_u32(offset),_u16(0)));
+  const parts=[...fileParts,...central,end]; let total=0; parts.forEach(p=>total+=p.length);
+  const out=new Uint8Array(total); let pos=0; parts.forEach(p=>{ out.set(p,pos); pos+=p.length; });
+  return out;
+}
+function safeName(s){ return String(s||'').replace(/[^A-Za-z0-9]+/g,'_').replace(/^_+|_+$/g,''); }
+function zipModal(){
+  modal('Bulk Invoice Download (ZIP)',
+    `<div class="form-grid">
+      <div class="field full"><label>Customer</label><select id="zp_cust"><option value="">All customers</option>${DB.customers.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}</select></div>
+      <div class="field"><label>From date</label><input id="zp_from" type="date"></div>
+      <div class="field"><label>To date</label><input id="zp_to" type="date"></div>
+    </div>
+    <div class="muted" style="font-size:12px;margin-top:8px">Leave dates empty for all-time. Each invoice is saved as a printable HTML file inside one ZIP.</div>`,
+    `<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn gold" onclick="doExportZip()">⬇ Download ZIP</button>`);
+}
+function doExportZip(){
+  const cid=val('zp_cust'), from=val('zp_from'), to=val('zp_to');
+  const list=DB.invoices.filter(i=>{
+    if(cid&&i.customerId!==cid)return false;
+    if(from&&i.date<from)return false;
+    if(to&&i.date>to)return false;
+    return true;
+  }).sort((a,b)=>a.no.localeCompare(b.no));
+  if(!list.length)return toast('No invoices match the selection','err');
+  const files=list.map(i=>({name:safeName(i.no)+'_'+safeName(customer(i.customerId).name)+'.html',data:invoiceHTML(hydrate(i),DB.company)}));
+  const bytes=makeZip(files);
+  const blob=new Blob([bytes],{type:'application/zip'});
+  const nm='DNK_Invoices_'+(cid?safeName(customer(cid).name):'All')+'_'+todayISO()+'.zip';
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=nm;a.click();
+  logAct('Bulk invoice ZIP',list.length+' invoice(s)'+(cid?(' — '+(customer(cid).name||'')):''));
+  save(); closeModal(); toast('Downloaded '+list.length+' invoices as ZIP','ok');
 }
 
 /* ---------------- UI utils ---------------- */

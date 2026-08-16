@@ -207,3 +207,48 @@ function openPrint(html){
   ov.querySelector('.po-close').onclick = ()=> ov.remove();
   ov.addEventListener('click', e=>{ if(e.target===ov) ov.remove(); });
 }
+
+/* ---- Batching Slip — mix design for the selected grade, scaled to the dispatch quantity ---- */
+function batchSlipHTML(inv, company, mix){
+  const co=company; const qty=Number(inv.qty)||0;
+  const M=mix||{cement:0,sand:0,agg20:0,agg12:0,water:0,admix:0};
+  const rows=[
+    ['Cement (OPC 53)', M.cement, 'kg', (M.cement*qty/50)],
+    ['River / M-Sand', M.sand, 'kg', null],
+    ['Coarse Aggregate 20mm', M.agg20, 'kg', null],
+    ['Coarse Aggregate 12mm', M.agg12, 'kg', null],
+    ['Water', M.water, 'ltr', null],
+    ['Admixture', M.admix, 'ltr', null],
+  ];
+  const body=rows.map(r=>{
+    const per=Number(r[1])||0, tot=per*qty;
+    const extra = r[3]!=null ? ` <span class="muted">(${(Number(r[3])||0).toFixed(1)} bags)</span>` : '';
+    return `<tr><td>${r[0]}</td><td class="r">${per.toFixed(2)} ${r[2]}/Cum</td><td class="r"><b>${tot.toFixed(2)} ${r[2]}</b>${extra}</td></tr>`;
+  }).join('');
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Batching Slip — ${inv.no||''}</title>
+    <style>body{font-family:"Segoe UI",Arial,sans-serif;color:#111;font-size:12px;padding:16px}
+    h2{margin:0}.muted{color:#666}table{border-collapse:collapse;width:100%;margin-top:10px}
+    td,th{border:1px solid #999;padding:5px 7px}.r{text-align:right}th{background:#f0f0f0;text-align:left}
+    .head{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #14508c;padding-bottom:8px}
+    .meta{display:flex;flex-wrap:wrap;gap:6px 26px;margin-top:10px}.meta div{font-size:12px}
+    .big{background:#14508c;color:#fff;padding:8px 12px;border-radius:6px;display:inline-block;margin-top:10px;font-size:15px;font-weight:700}
+    .sign{margin-top:34px;display:flex;justify-content:space-between}</style></head><body>
+    <div class="head"><div><h2>${co.name}</h2><div class="muted">${co.addressLines.join(', ')}<br>GSTIN: ${co.gstin}</div></div>
+      <img src="${window.LOGO_DATA}" style="width:70px;height:70px;object-fit:contain"></div>
+    <h3 style="margin:12px 0 0">BATCHING SLIP</h3>
+    <div class="meta">
+      <div><b>Slip / Ref No:</b> ${inv.no||'-'}</div>
+      <div><b>Date:</b> ${fmtDate(inv.date)}</div>
+      <div><b>Customer:</b> ${inv.buyerName||'-'}</div>
+      <div><b>Site:</b> ${inv.siteName||'-'}</div>
+      <div><b>Vehicle:</b> ${inv.vehicle||'-'}</div>
+      <div><b>Dispatched Through:</b> ${inv.dispatchThrough||'-'}</div>
+    </div>
+    <div class="big">Grade ${inv.gradeName||'-'} &nbsp;•&nbsp; ${qty.toFixed(2)} ${inv.unit||'Cum'}</div>
+    <table><thead><tr><th>Material</th><th class="r">Design (per Cum)</th><th class="r">Required for ${qty.toFixed(2)} Cum</th></tr></thead>
+    <tbody>${body}</tbody></table>
+    <div class="muted" style="margin-top:8px">Indicative mix design — adjust for moisture, workability &amp; site conditions before batching.</div>
+    <div class="sign"><div>Batched by: ____________________</div><div>Approved by: ____________________</div></div>
+    <div class="muted" style="margin-top:18px;text-align:center">This is a computer-generated batching slip.</div>
+    </body></html>`;
+}
