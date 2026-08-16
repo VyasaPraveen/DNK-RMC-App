@@ -213,7 +213,22 @@ const routes = {
   vendors:renderVendors, activity:renderActivity
 };
 let current='dashboard';
-function go(route){ current=route; renderApp(); }
+function go(route){
+  current=route;
+  const perms=myPerms();
+  if(!perms[current] || !featureOn(current)) current='dashboard';
+  // Update the active link + main content in place so the sidebar DOM (and its
+  // scroll position) is preserved. Falling back to a full renderApp() only when
+  // the shell isn't mounted yet (e.g. right after login).
+  const navEl=document.querySelector('.nav');
+  const mainEl=document.getElementById('main');
+  if(navEl && mainEl){
+    navEl.querySelectorAll('a').forEach(a=>a.classList.toggle('active', a.getAttribute('data-r')===current));
+    (routes[current]||renderDashboard)();
+  } else {
+    renderApp();
+  }
+}
 
 /* ---------------- Auth & session user ---------------- */
 const authGet=()=>{try{return sessionStorage.getItem('dnk_auth')==='1';}catch(e){return false;}};
@@ -362,7 +377,7 @@ const NAV=[
   {grp:'Plant & Staff',items:[
     {r:'inventory',ic:'📦',t:'Product Inventory'},
     {r:'vendors',ic:'🚛',t:'Vendors & Purchases'},
-    {r:'staff',ic:'🧑‍🏭',t:'Staff Attendance'},
+    {r:'staff',ic:'👷',t:'Staff Attendance'},
     {r:'payroll',ic:'🧾',t:'Salary / Payroll'},
   ]},
   {grp:'Sales Tools',items:[
@@ -387,11 +402,12 @@ const NAV=[
 function renderApp(){
   if(!loggedIn){ renderLogin(); return; }
   const perms=myPerms();
+  if(!perms[current] || !featureOn(current)) current='dashboard';
   const nav = NAV.map(g=>{
     const items=g.items.filter(i=>perms[i.r] && featureOn(i.r));
     if(!items.length) return '';
     return `<div class="grp">${g.grp}</div>`+items.map(i=>
-      `<a class="${current===i.r?'active':''}" onclick="go('${i.r}')"><span class="ic">${i.ic}</span><span class="nt">${i.t}</span></a>`).join('');
+      `<a data-r="${i.r}" class="${current===i.r?'active':''}" onclick="go('${i.r}')"><span class="ic">${i.ic}</span><span class="nt">${i.t}</span></a>`).join('');
   }).join('');
   document.getElementById('root').innerHTML=`
   <div class="app">
@@ -401,7 +417,6 @@ function renderApp(){
     </div>
     <div class="main" id="main"></div>
   </div>`;
-  if(!perms[current] || !featureOn(current)) current='dashboard';
   (routes[current]||renderDashboard)();
 }
 function topbar(title,sub,actions){
