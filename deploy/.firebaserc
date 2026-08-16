@@ -1,12 +1,11 @@
 {
   "projects": {
-    "default": "dnk-rmc-est-817e1"
+    "default": "dnk-rmc"
   },
   "targets": {
-    "dnk-rmc-est-817e1": {
+    "dnk-rmc": {
       "hosting": {
-        "app": ["dnk-powerconmix"],
-        "proposal": ["dnk-rmc-proposal"]
+        "app": ["dnk-rmc"]
       }
     }
   }
