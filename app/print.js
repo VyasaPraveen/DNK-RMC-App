@@ -37,14 +37,20 @@ function computeInvoice(inv, company){
   const noGst = !(inv.buyerGstin && String(inv.buyerGstin).trim());
   const interState = (inv.buyerStateCode||'') !== company.stateCode;
   const gstRate = noGst ? 0 : (inv.gstRate!=null ? inv.gstRate : 18);
+  // Pump charges — optional; GST applies only when the "Apply GST on pump" flag is on
+  // AND the buyer is GST-registered. Otherwise pump is added without tax.
+  const pump = round2(+inv.pump||0);
+  const pumpGst = !!inv.pumpGst && !noGst;
+  const pumpTaxable = pumpGst ? pump : 0;
+  const baseTaxable = round2(taxable + pumpTaxable);   // value that attracts GST
   let cgst=0,sgst=0,igst=0;
   if(!noGst){
-    if(interState){ igst = round2(taxable*gstRate/100); }
-    else { cgst = round2(taxable*(gstRate/2)/100); sgst = round2(taxable*(gstRate/2)/100); }
+    if(interState){ igst = round2(baseTaxable*gstRate/100); }
+    else { cgst = round2(baseTaxable*(gstRate/2)/100); sgst = round2(baseTaxable*(gstRate/2)/100); }
   }
   const totalTax = round2(cgst+sgst+igst);
-  const grand = round2(taxable+totalTax);
-  return {taxable,interState,gstRate,cgst,sgst,igst,totalTax,grand,noGst};
+  const grand = round2(taxable + pump + totalTax);
+  return {taxable,interState,gstRate,cgst,sgst,igst,totalTax,grand,noGst,pump,pumpGst,pumpTaxable,baseTaxable};
 }
 function round2(n){ return Math.round(Number(n)*100)/100; }
 
@@ -53,14 +59,14 @@ function invoiceHTML(inv, company, opts){
   const c = computeInvoice(inv, company);
   const isChallan = opts && opts.challan;
   const taxSummary = c.interState
-    ? `<tr><td>${inv.hsn}</td><td class="r">${inr(c.taxable)}</td><td class="c">${c.gstRate}%</td><td class="r">${inr(c.igst)}</td><td class="r">${inr(c.totalTax)}</td></tr>`
-    : `<tr><td>${inv.hsn}</td><td class="r">${inr(c.taxable)}</td><td class="c">${c.gstRate/2}%</td><td class="r">${inr(c.cgst)}</td><td class="c">${c.gstRate/2}%</td><td class="r">${inr(c.sgst)}</td><td class="r">${inr(c.totalTax)}</td></tr>`;
+    ? `<tr><td>${inv.hsn}</td><td class="r">${inr(c.baseTaxable)}</td><td class="c">${c.gstRate}%</td><td class="r">${inr(c.igst)}</td><td class="r">${inr(c.totalTax)}</td></tr>`
+    : `<tr><td>${inv.hsn}</td><td class="r">${inr(c.baseTaxable)}</td><td class="c">${c.gstRate/2}%</td><td class="r">${inr(c.cgst)}</td><td class="c">${c.gstRate/2}%</td><td class="r">${inr(c.sgst)}</td><td class="r">${inr(c.totalTax)}</td></tr>`;
   const taxSummaryHead = c.interState
     ? `<tr><th rowspan="2">HSN/SAC</th><th rowspan="2">Taxable Value</th><th colspan="2">IGST</th><th rowspan="2">Total Tax Amount</th></tr><tr><th>Rate</th><th>Amount</th></tr>`
     : `<tr><th rowspan="2">HSN/SAC</th><th rowspan="2">Taxable Value</th><th colspan="2">CGST</th><th colspan="2">SGST</th><th rowspan="2">Total Tax Amount</th></tr><tr><th>Rate</th><th>Amount</th><th>Rate</th><th>Amount</th></tr>`;
 
   const docTitle = isChallan ? 'Delivery Challan' : (c.noGst ? 'Invoice (Bill of Supply)' : 'Tax Invoice');
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${docTitle} ${inv.no}</title>
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${docTitle} ${esc(inv.no)}</title>
   <style>
     @page{size:A4;margin:12mm}
     *{box-sizing:border-box}
@@ -83,7 +89,6 @@ function invoiceHTML(inv, company, opts){
     .logo{width:70px;height:70px;object-fit:contain;float:left;margin-right:8px}
     .qr{width:64px;height:64px}
     .foot{text-align:center;font-style:italic;padding:5px;font-size:10px}
-    .stamp{color:#1a3d8f;border:2px solid #1a3d8f;border-radius:50%;width:90px;height:90px;display:flex;align-items:center;justify-content:center;text-align:center;font-size:8px;font-weight:700;transform:rotate(-12deg);opacity:.8;margin:6px auto}
     @media print{.noprint{display:none};body{margin:0}}
     body{padding:14px}
   </style></head><body>
@@ -93,30 +98,30 @@ function invoiceHTML(inv, company, opts){
       <tr>
         <td style="width:55%" rowspan="4" class="seller">
           <img src="${window.LOGO_DATA||''}" class="logo">
-          <b>M/S ${company.name}</b><br>
-          ${company.addressLines.map(l=>`<span class="small">${l}</span>`).join('<br>')}<br>
-          <span class="small">GSTIN/UIN: ${company.gstin}</span><br>
-          <span class="small">State Name: ${company.stateName}, Code: ${company.stateCode}</span><br>
-          <span class="small">E-Mail: ${company.email}</span>
+          <b>M/S ${esc(company.name)}</b><br>
+          ${company.addressLines.map(l=>`<span class="small">${esc(l)}</span>`).join('<br>')}<br>
+          <span class="small">GSTIN/UIN: ${esc(company.gstin)}</span><br>
+          <span class="small">State Name: ${esc(company.stateName)}, Code: ${esc(company.stateCode)}</span><br>
+          <span class="small">E-Mail: ${esc(company.email)}</span>
         </td>
-        <td style="width:22%">Invoice No.<br><b>${inv.no}</b></td>
+        <td style="width:22%">Invoice No.<br><b>${esc(inv.no)}</b></td>
         <td style="width:23%">Dated<br><b>${fmtDate(inv.date)}</b></td>
       </tr>
-      <tr><td>Delivery Note<br>${inv.no}</td><td>Mode/Terms of Payment<br>${inv.terms||'Immediate'}</td></tr>
-      <tr><td>Dispatched through<br><b>${inv.dispatchThrough||'Transit Mixer'}</b></td><td>Motor Vehicle No.<br><b>${inv.vehicle||''}</b></td></tr>
-      <tr><td>Driver<br>${inv.driver||'-'}</td><td>Delivery Note Date<br>${fmtDate(inv.date)}</td></tr>
+      <tr><td>Delivery Note<br>${esc(inv.no)}</td><td>Mode/Terms of Payment<br>${esc(inv.terms)||'Immediate'}</td></tr>
+      <tr><td>Dispatched through<br><b>${esc(inv.dispatchThrough)||'Transit Mixer'}</b></td><td>Motor Vehicle No.<br><b>${esc(inv.vehicle)}</b></td></tr>
+      <tr><td>Driver<br>${esc(inv.driver)||'-'}</td><td>Delivery Note Date<br>${fmtDate(inv.date)}</td></tr>
       <tr>
         <td class="seller">
           <b>Buyer (Bill to):</b><br>
-          <b>${inv.buyerName}</b><br>
-          <span class="small">${(inv.buyerAddress||'').replace(/\n/g,'<br>')}</span><br>
-          <span class="small">GSTIN/UIN: ${inv.buyerGstin||'-'}</span><br>
-          <span class="small">State Name: ${inv.buyerState||''}, Code: ${inv.buyerStateCode||''}</span>
+          <b>${esc(inv.buyerName)}</b><br>
+          <span class="small">${esc(inv.buyerAddress||'').replace(/\n/g,'<br>')}</span><br>
+          <span class="small">GSTIN/UIN: ${esc(inv.buyerGstin)||'-'}</span><br>
+          <span class="small">State Name: ${esc(inv.buyerState)}, Code: ${esc(inv.buyerStateCode)}</span>
         </td>
         <td colspan="2" class="seller">
           <b>Site / Project:</b><br>
-          <span class="small">${(inv.siteName||'-')}</span><br>
-          <span class="small">${(inv.siteAddress||'').replace(/\n/g,'<br>')}</span>
+          <span class="small">${esc(inv.siteName)||'-'}</span><br>
+          <span class="small">${esc(inv.siteAddress||'').replace(/\n/g,'<br>')}</span>
         </td>
       </tr>
     </table>
@@ -124,16 +129,26 @@ function invoiceHTML(inv, company, opts){
       <tr><th style="width:26px">Sl</th><th>Description of Goods</th><th style="width:70px">HSN/SAC</th><th style="width:50px">GST Rate</th><th style="width:70px">Quantity</th><th style="width:70px">Rate</th><th style="width:40px">per</th><th style="width:80px">Amount</th></tr>
       <tr>
         <td class="c">1</td>
-        <td class="desc"><b>Ready Mix Concrete Grade (GST) ${inv.gradeName}</b>
+        <td class="desc"><b>Ready Mix Concrete Grade (GST) ${esc(inv.gradeName)}</b>
           <div style="margin-top:8px">${taxTable(c,inv)}</div>
         </td>
-        <td class="c">${inv.hsn}</td>
+        <td class="c">${esc(inv.hsn)}</td>
         <td class="c">${c.noGst?'—':c.gstRate+'%'}</td>
         <td class="r">${inv.qty.toFixed(2)} ${inv.unit}</td>
         <td class="r">${inr(inv.rate)}</td>
         <td class="c">${inv.unit}</td>
         <td class="r b">${inr(c.taxable)}</td>
       </tr>
+      ${c.pump>0?`<tr>
+        <td class="c">2</td>
+        <td class="desc" style="min-height:0"><b>Concrete Pumping Charges</b>${c.pumpGst?'':' <span class="small">(GST not applicable)</span>'}</td>
+        <td class="c">995469</td>
+        <td class="c">${c.pumpGst?c.gstRate+'%':'—'}</td>
+        <td class="r">—</td>
+        <td class="r">${inr(c.pump)}</td>
+        <td class="c">job</td>
+        <td class="r b">${inr(c.pump)}</td>
+      </tr>`:''}
       <tr><td colspan="4" class="r b">Total</td><td class="r b">${inv.qty.toFixed(2)} ${inv.unit}</td><td colspan="2"></td><td class="r b">₹ ${inr(c.grand)}</td></tr>
     </table>
     <div class="words">Amount Chargeable (in words):&nbsp; ${numToWords(c.grand)} <span style="float:right;font-weight:400">E. &amp; O.E</span></div>
@@ -142,7 +157,7 @@ function invoiceHTML(inv, company, opts){
       : `<table>
       ${taxSummaryHead}
       ${taxSummary}
-      <tr class="b"><td class="r">Total</td><td class="r">${inr(c.taxable)}</td>${c.interState?`<td></td><td class="r">${inr(c.igst)}</td>`:`<td></td><td class="r">${inr(c.cgst)}</td><td></td><td class="r">${inr(c.sgst)}</td>`}<td class="r">${inr(c.totalTax)}</td></tr>
+      <tr class="b"><td class="r">Total</td><td class="r">${inr(c.baseTaxable)}</td>${c.interState?`<td></td><td class="r">${inr(c.igst)}</td>`:`<td></td><td class="r">${inr(c.cgst)}</td><td></td><td class="r">${inr(c.sgst)}</td>`}<td class="r">${inr(c.totalTax)}</td></tr>
     </table>
     <div class="words small">Tax Amount (in words): ${numToWords(c.totalTax)}</div>`}
     <table>
@@ -150,17 +165,16 @@ function invoiceHTML(inv, company, opts){
         <td style="width:50%" class="bank">
           <b>Company's Bank Details</b>
           <table style="margin-top:3px"><tbody class="bank">
-            <tr><td style="width:70px">Bank Name</td><td>: ${company.bank.bank}</td></tr>
-            <tr><td>A/c Holder</td><td>: ${company.bank.name}</td></tr>
-            <tr><td>A/c No.</td><td>: ${company.bank.acno}</td></tr>
-            <tr><td>Branch</td><td>: ${company.bank.branch}</td></tr>
-            <tr><td>IFSC Code</td><td>: ${company.bank.ifsc}</td></tr>
+            <tr><td style="width:70px">Bank Name</td><td>: ${esc(company.bank.bank)}</td></tr>
+            <tr><td>A/c Holder</td><td>: ${esc(company.bank.name)}</td></tr>
+            <tr><td>A/c No.</td><td>: ${esc(company.bank.acno)}</td></tr>
+            <tr><td>Branch</td><td>: ${esc(company.bank.branch)}</td></tr>
+            <tr><td>IFSC Code</td><td>: ${esc(company.bank.ifsc)}</td></tr>
           </tbody></table>
         </td>
         <td style="width:50%">
-          <div class="stamp">DNK POWER CONMIX<br>★ ACCOUNTS ★<br>V.KOTA</div>
-          <div class="r" style="padding-top:6px">for <b>M/S ${company.name}</b></div>
-          <div class="sign r" style="padding-top:36px">Authorised Signatory</div>
+          <div class="r" style="padding-top:6px">for <b>M/S ${esc(company.name)}</b></div>
+          <div class="sign r" style="padding-top:56px">Authorised Signatory</div>
         </td>
       </tr>
     </table>
@@ -225,7 +239,7 @@ function batchSlipHTML(inv, company, mix){
     const extra = r[3]!=null ? ` <span class="muted">(${(Number(r[3])||0).toFixed(1)} bags)</span>` : '';
     return `<tr><td>${r[0]}</td><td class="r">${per.toFixed(2)} ${r[2]}/Cum</td><td class="r"><b>${tot.toFixed(2)} ${r[2]}</b>${extra}</td></tr>`;
   }).join('');
-  return `<!doctype html><html><head><meta charset="utf-8"><title>Batching Slip — ${inv.no||''}</title>
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Batching Slip — ${esc(inv.no)}</title>
     <style>body{font-family:"Segoe UI",Arial,sans-serif;color:#111;font-size:12px;padding:16px}
     h2{margin:0}.muted{color:#666}table{border-collapse:collapse;width:100%;margin-top:10px}
     td,th{border:1px solid #999;padding:5px 7px}.r{text-align:right}th{background:#f0f0f0;text-align:left}
@@ -233,18 +247,18 @@ function batchSlipHTML(inv, company, mix){
     .meta{display:flex;flex-wrap:wrap;gap:6px 26px;margin-top:10px}.meta div{font-size:12px}
     .big{background:#14508c;color:#fff;padding:8px 12px;border-radius:6px;display:inline-block;margin-top:10px;font-size:15px;font-weight:700}
     .sign{margin-top:34px;display:flex;justify-content:space-between}</style></head><body>
-    <div class="head"><div><h2>${co.name}</h2><div class="muted">${co.addressLines.join(', ')}<br>GSTIN: ${co.gstin}</div></div>
+    <div class="head"><div><h2>${esc(co.name)}</h2><div class="muted">${esc(co.addressLines.join(', '))}<br>GSTIN: ${esc(co.gstin)}</div></div>
       <img src="${window.LOGO_DATA}" style="width:70px;height:70px;object-fit:contain"></div>
     <h3 style="margin:12px 0 0">BATCHING SLIP</h3>
     <div class="meta">
-      <div><b>Slip / Ref No:</b> ${inv.no||'-'}</div>
+      <div><b>Slip / Ref No:</b> ${esc(inv.no)||'-'}</div>
       <div><b>Date:</b> ${fmtDate(inv.date)}</div>
-      <div><b>Customer:</b> ${inv.buyerName||'-'}</div>
-      <div><b>Site:</b> ${inv.siteName||'-'}</div>
-      <div><b>Vehicle:</b> ${inv.vehicle||'-'}</div>
-      <div><b>Dispatched Through:</b> ${inv.dispatchThrough||'-'}</div>
+      <div><b>Customer:</b> ${esc(inv.buyerName)||'-'}</div>
+      <div><b>Site:</b> ${esc(inv.siteName)||'-'}</div>
+      <div><b>Vehicle:</b> ${esc(inv.vehicle)||'-'}</div>
+      <div><b>Dispatched Through:</b> ${esc(inv.dispatchThrough)||'-'}</div>
     </div>
-    <div class="big">Grade ${inv.gradeName||'-'} &nbsp;•&nbsp; ${qty.toFixed(2)} ${inv.unit||'Cum'}</div>
+    <div class="big">Grade ${esc(inv.gradeName)||'-'} &nbsp;•&nbsp; ${qty.toFixed(2)} ${esc(inv.unit)||'Cum'}</div>
     <table><thead><tr><th>Material</th><th class="r">Design (per Cum)</th><th class="r">Required for ${qty.toFixed(2)} Cum</th></tr></thead>
     <tbody>${body}</tbody></table>
     <div class="muted" style="margin-top:8px">Indicative mix design — adjust for moisture, workability &amp; site conditions before batching.</div>

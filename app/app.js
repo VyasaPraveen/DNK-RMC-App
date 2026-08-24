@@ -20,6 +20,27 @@ function hashStr(s){
 }
 function normKey(s){ return String(s==null?'':s).trim().toLowerCase(); }
 
+/* HTML-escape any user-controlled value before it goes into innerHTML / attributes.
+   Critical now that data syncs via Firestore — a value poisoned on one device would
+   otherwise execute as stored XSS in every other user's browser. Safe in both text
+   and double-quoted-attribute contexts. */
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+/* ---------------- Input validation & normalisation ----------------
+   GSTIN = 2 digits + 5 letters + 4 digits + 1 letter + 1 digit + 2 letters
+   e.g. 37ATRPK7789E1ZU / 29AAPCS5668E1ZP */
+const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9][A-Z]{2}$/;
+function gstinValid(s){ return GSTIN_RE.test(String(s||'').toUpperCase().trim()); }
+/* live-format an <input> as the user types (keeps caret position) */
+function fmtInput(id,transform){ const e=document.getElementById(id); if(!e)return; const p=e.selectionStart; e.value=transform(e.value); try{e.setSelectionRange(p,p);}catch(_){}
+}
+function upperInput(id){ fmtInput(id,v=>v.toUpperCase()); }
+function digitsInput(id,max){ fmtInput(id,v=>{ v=v.replace(/\D/g,''); return max?v.slice(0,max):v; }); }
+function lettersInput(id){ fmtInput(id,v=>v.replace(/[^A-Za-z .]/g,'')); }
+function plateInput(id){ fmtInput(id,v=>v.replace(/[^A-Za-z0-9 ]/g,'').toUpperCase()); }
+function decimalInput(id){ fmtInput(id,v=>{ v=v.replace(/[^0-9.]/g,''); const i=v.indexOf('.'); if(i>=0) v=v.slice(0,i+1)+v.slice(i+1).replace(/\./g,''); return v; }); }
+function phoneOk(s){ s=String(s||'').trim(); return s==='' || /^[0-9]{1,10}$/.test(s); }
+
 /* Feature toggles — Admin can enable/disable modules from Settings without a rebuild.
    Core modules (dashboard, settings, users) are always on so admin can't lock out. */
 const CORE_FEATURES = {dashboard:1,settings:1,users:1};
@@ -28,9 +49,9 @@ function featureOn(r){ if(CORE_FEATURES[r]) return true; return !DB.features || 
 /* Role presets — Admin (full), Accountant (operations, no users/settings/audit),
    Auditor (read-only: can view records & audit log, cannot create/edit/delete). */
 const ROLE_PERMS = {
-  Admin:      {dashboard:1,newinvoice:1,invoices:1,payments:1,inventory:1,staff:1,payroll:1,vendors:1,leads:1,concalc:1,revenue:1,customers:1,sites:1,vehicles:1,grades:1,rates:1,reports:1,activity:1,users:1,settings:1},
-  Accountant: {dashboard:1,newinvoice:1,invoices:1,payments:1,inventory:1,staff:1,payroll:1,vendors:1,leads:1,concalc:1,revenue:1,customers:1,sites:1,vehicles:1,grades:1,rates:1,reports:1,activity:0,users:0,settings:0},
-  Auditor:    {dashboard:1,newinvoice:0,invoices:1,payments:1,inventory:1,staff:1,payroll:1,vendors:1,leads:0,concalc:0,revenue:0,customers:1,sites:1,vehicles:1,grades:1,rates:1,reports:1,activity:1,users:0,settings:0}
+  Admin:      {dashboard:1,newinvoice:1,invoices:1,payments:1,inventory:1,materials:1,staff:1,payroll:1,vendors:1,vehiclelog:1,leads:1,concalc:1,revenue:1,customers:1,sites:1,vehicles:1,grades:1,rates:1,reports:1,activity:1,users:1,settings:1},
+  Accountant: {dashboard:1,newinvoice:1,invoices:1,payments:1,inventory:1,materials:1,staff:1,payroll:1,vendors:1,vehiclelog:1,leads:1,concalc:1,revenue:1,customers:1,sites:1,vehicles:1,grades:1,rates:1,reports:1,activity:0,users:0,settings:0},
+  Auditor:    {dashboard:1,newinvoice:0,invoices:1,payments:1,inventory:1,materials:1,staff:1,payroll:1,vendors:1,vehiclelog:1,leads:0,concalc:0,revenue:0,customers:1,sites:1,vehicles:1,grades:1,rates:1,reports:1,activity:1,users:0,settings:0}
 };
 /* Auditor is read-only — this gate blocks every create/edit/delete action. */
 function canEdit(){ return !(ME && ME.role==='Auditor'); }
@@ -149,6 +170,16 @@ function seed(){
       {id:'pu1',vendorId:'vn1',productId:'p1',qty:500,rate:360,amount:180000,date:'2026-07-03',billNo:'UT/5567',paid:180000,at:'2026-07-03 10:15:00'},
       {id:'pu2',vendorId:'vn2',productId:'p2',qty:100,rate:900,amount:90000,date:'2026-07-02',billNo:'SVA/221',paid:50000,at:'2026-07-02 09:30:00'},
     ],
+    materials:[
+      {id:'mt1',date:'2026-08-05',material:'20MM',qty:27.43,vendorId:'vn2',vehicleNo:'AP39WQ0715',rate:900,amount:round2(27.43*900),paid:round2(27.43*900),remarks:'',at:'2026-08-05 09:10:00'},
+      {id:'mt2',date:'2026-08-05',material:'CEMENT',qty:34.73,vendorId:'vn1',vehicleNo:'',rate:380,amount:round2(34.73*380),paid:0,remarks:'On credit',at:'2026-08-05 11:30:00'},
+      {id:'mt3',date:'2026-08-06',material:'M SAND',qty:41.72,vendorId:'vn2',vehicleNo:'AP03TM4420',rate:1100,amount:round2(41.72*1100),paid:20000,remarks:'',at:'2026-08-06 10:05:00'},
+    ],
+    vehicleLogs:[
+      {id:'vl1',vehicleId:'v1',date:'2026-08-05',prev:34010,curr:34093,fuel:'FULL',amount:3000,at:'2026-08-05 18:00:00'},
+      {id:'vl2',vehicleId:'v1',date:'2026-08-06',prev:34093,curr:34172,fuel:'',amount:0,at:'2026-08-06 18:00:00'},
+      {id:'vl3',vehicleId:'v2',date:'2026-08-05',prev:33362,curr:33446,fuel:'FULL',amount:2500,at:'2026-08-05 18:30:00'},
+    ],
     activity:[],
     seq:1402,
     user:{name:'Administrator',role:'Admin'}
@@ -168,7 +199,7 @@ function load(){
 }
 function migrate(d){
   const s=seed();
-  ['grades','customers','sites','vehicles','rates','invoices','payments','users','leads','products','stockmoves','staff','attendance','advances','salaryRecords','vendors','purchases','activity'].forEach(k=>{ if(!Array.isArray(d[k])) d[k]=s[k]; });
+  ['grades','customers','sites','vehicles','rates','invoices','payments','users','leads','products','stockmoves','staff','attendance','advances','salaryRecords','vendors','purchases','materials','vehicleLogs','activity'].forEach(k=>{ if(!Array.isArray(d[k])) d[k]=s[k]; });
   if(!d.company) d.company=s.company;
   if(d.seq==null) d.seq=s.seq;
   // backfill grade mix designs
@@ -180,8 +211,77 @@ function migrate(d){
   d.users.forEach(u=>{ if(!u.pwd) u.pwd=hashStr((u.username||'user')+'@123'); if(!u.secQ){ u.secQ='In which town is the plant located?'; u.secA=hashStr('vkota'); } });
   return d;
 }
-function save(){ store.set(DB_KEY,JSON.stringify(DB)); }
+function save(){ store.set(DB_KEY,JSON.stringify(DB)); cloudSchedulePush(); }
 function uid(p){ return p+Math.random().toString(36).slice(2,8); }
+
+/* ================= CLOUD SYNC (Firestore single-doc, real-time) =================
+   Every device signs in anonymously and shares ONE document (app/main) holding the
+   whole DB as JSON. Each device listens for remote changes and pushes local changes
+   (debounced), so multiple admins on different machines stay in sync. If Firestore
+   is unavailable (offline / SDK blocked / provider off) the app runs local-only and
+   never blocks. Whole-doc last-write-wins; the live listener keeps the write window
+   tiny for a small team. */
+const CLOUD = { ref:null, ready:false, applying:false, pushT:null, lastJSON:'', pending:null, status:'off' };
+function cloudInit(){
+  if(!window.fbDb || !window.fbAuth){ CLOUD.status='off'; cloudBadge(); return; }
+  CLOUD.status='connecting'; cloudBadge();
+  const start=()=>{
+    try{ CLOUD.ref = window.fbDb.collection('app').doc('main'); }
+    catch(e){ CLOUD.status='off'; cloudBadge(); return; }
+    CLOUD.ref.onSnapshot(snap=>{
+      if(!snap.exists){ cloudPush(true); return; }           // first run — seed cloud from local
+      const data=snap.data();
+      if(!data || typeof data.json!=='string') return;
+      if(snap.metadata && snap.metadata.hasPendingWrites) return; // ignore our own optimistic echo
+      if(data.json===CLOUD.lastJSON) return;                 // nothing new
+      if(document.getElementById('modalBg')){ CLOUD.pending=data.json; return; } // defer while editing
+      cloudApply(data.json);
+    }, err=>{ CLOUD.status='error'; cloudBadge(); });
+    CLOUD.ready=true; CLOUD.status='synced'; cloudBadge();
+  };
+  if(window.fbAuth.currentUser){ start(); }
+  else { window.fbAuth.signInAnonymously().then(start).catch(()=>{ CLOUD.status='off'; cloudBadge(); }); }
+}
+function cloudApply(json){
+  try{
+    const remote=JSON.parse(json);
+    CLOUD.applying=true;
+    DB=migrate(remote);
+    CLOUD.lastJSON=json;
+    store.set(DB_KEY,JSON.stringify(DB));
+    if(loggedIn) renderApp(); else renderLogin();
+    CLOUD.applying=false;
+    CLOUD.status='synced'; cloudBadge();
+  }catch(e){ CLOUD.applying=false; }
+}
+function cloudPush(force){
+  if(!CLOUD.ref) return;
+  if(CLOUD.applying && !force) return;
+  const json=JSON.stringify(DB);
+  if(json===CLOUD.lastJSON && !force) return;
+  if(json.length>1000000){                       // Firestore hard limit is 1 MB per document
+    CLOUD.status='error'; cloudBadge();
+    toast('Data too large for cloud sync (1 MB limit) — saved locally only','err');
+    return;
+  }
+  CLOUD.lastJSON=json;
+  CLOUD.ref.set({json, at:Date.now(), by:(ME&&ME.name)||'system'})
+    .then(()=>{ CLOUD.status='synced'; cloudBadge(); })
+    .catch(()=>{ CLOUD.status='error'; cloudBadge(); });
+}
+function cloudSchedulePush(){
+  if(!CLOUD.ref || CLOUD.applying) return;
+  clearTimeout(CLOUD.pushT);
+  CLOUD.pushT=setTimeout(()=>cloudPush(false), 600);
+}
+function cloudBadge(){
+  if(typeof document==='undefined' || !document.body) return;
+  let b=document.getElementById('cloudBadge');
+  if(!b){ b=document.createElement('div'); b.id='cloudBadge'; b.className='cloud-badge'; document.body.appendChild(b); b.onclick=()=>cloudPush(true); }
+  const map={synced:['☁ Synced','ok'],error:['⚠ Offline','err'],off:['☁ Local only','off'],connecting:['☁ Connecting…','off']};
+  const s=map[CLOUD.status]||map.off; b.textContent=s[0]; b.className='cloud-badge '+s[1];
+  b.title='Cloud sync: '+s[0]+(CLOUD.ref?' — click to force a sync':'');
+}
 
 /* ---------------- Helpers to hydrate an invoice ---------------- */
 function grade(id){ return DB.grades.find(g=>g.id===id)||{}; }
@@ -210,7 +310,8 @@ const routes = {
   reports:renderReports, settings:renderSettings,
   leads:renderLeads, concalc:renderConcalc, revenue:renderRevenue, users:renderUsers,
   inventory:renderInventory, staff:renderStaff, payroll:renderPayroll,
-  vendors:renderVendors, activity:renderActivity
+  vendors:renderVendors, activity:renderActivity,
+  materials:renderMaterials, vehiclelog:renderVehicleLog
 };
 let current='dashboard';
 function go(route){
@@ -377,6 +478,8 @@ const NAV=[
   {grp:'Plant & Staff',items:[
     {r:'inventory',ic:'📦',t:'Product Inventory'},
     {r:'vendors',ic:'🚛',t:'Vendors & Purchases'},
+    {r:'materials',ic:'🧱',t:'Materials Received'},
+    {r:'vehiclelog',ic:'🛢️',t:'Vehicle Log'},
     {r:'staff',ic:'👷',t:'Staff Attendance'},
     {r:'payroll',ic:'🧾',t:'Salary / Payroll'},
   ]},
@@ -424,7 +527,7 @@ function topbar(title,sub,actions){
   return `<div class="topbar"><div><h2>${title}</h2><div class="sub">${sub||''}</div></div>
     <div style="display:flex;gap:14px;align-items:center">
     ${actions||''}
-    <div class="userchip">👤 <div><b>${u.name}</b><br><span>${u.role}${u.role==='Auditor'?' • read-only':''}</span></div>
+    <div class="userchip">👤 <div><b>${esc(u.name)}</b><br><span>${esc(u.role)}${u.role==='Auditor'?' • read-only':''}</span></div>
     <button class="btn ghost sm" onclick="logout()">Logout</button></div></div></div>`;
 }
 
@@ -479,8 +582,8 @@ function invoiceTable(list){
     list.map(i=>{const t=invTotals(i);const due=t.grand-(i.paid||0);
       const st=due<=0.5?'<span class="pill paid">Paid</span>':(i.paid>0?'<span class="pill part">Partial</span>':'<span class="pill due">Due</span>');
       return `<tr>
-        <td><b>${i.no}</b></td><td>${fmtDate(i.date)}</td><td>${customer(i.customerId).name||''}</td>
-        <td>${grade(i.gradeId).name||''}</td><td class="num">${i.qty.toFixed(2)}</td>
+        <td><b>${esc(i.no)}</b></td><td>${fmtDate(i.date)}</td><td>${esc(customer(i.customerId).name)}</td>
+        <td>${esc(grade(i.gradeId).name)}</td><td class="num">${i.qty.toFixed(2)}</td>
         <td class="num"><b>₹${inr(t.grand)}</b></td>
         <td>${taxPill(t)}</td>
         <td>${st}</td>
@@ -490,45 +593,66 @@ function invoiceTable(list){
 
 /* ---------------- New Invoice / Dispatch ---------------- */
 let form={customerId:'',siteId:'',gradeId:'',vehicleId:'',qty:'',rate:'',date:todayISO(),unit:'Cum',terms:'Immediate',dispatchThrough:'Transit Mixer'};
-function renderNewInvoice(){
-  form={customerId:'',siteId:'',gradeId:'',vehicleId:'',qty:'',rate:'',date:todayISO(),unit:'Cum',terms:'Immediate',dispatchThrough:'Transit Mixer'};
-  const nextNo='DNK/'+(DB.seq+1);
+function renderNewInvoice(editId){
+  const ed = editId ? DB.invoices.find(i=>i.id===editId) : null;
+  form = ed
+    ? {editId:ed.id,customerId:ed.customerId,siteId:ed.siteId,gradeId:ed.gradeId,vehicleId:ed.vehicleId,qty:ed.qty,rate:ed.rate,date:ed.date,unit:ed.unit||'Cum',terms:ed.terms||'Immediate',dispatchThrough:ed.dispatchThrough||'Transit Mixer',no:ed.no,pump:ed.pump||'',pumpGst:!!ed.pumpGst}
+    : {editId:'',customerId:'',siteId:'',gradeId:'',vehicleId:'',qty:'',rate:'',date:todayISO(),unit:'Cum',terms:'Immediate',dispatchThrough:'Transit Mixer',no:'',pump:'',pumpGst:false};
+  const autoNo = ed ? ed.no : 'DNK/'+(DB.seq+1);
+  const cust = customer(form.customerId);
+  const unreg = form.customerId && !(cust.gstin && cust.gstin.trim());
   document.getElementById('main').innerHTML=
-    topbar('New Dispatch / Bill','Select masters — GST is calculated automatically. Invoice: <b>'+nextNo+'</b>')+
+    topbar(ed?'Edit Bill — '+ed.no:'New Dispatch / Bill', ed?'Update invoice details. Number stays fixed for registered buyers; editable for unregistered.':'Select masters — GST is calculated automatically. Invoice: <b>'+autoNo+'</b>')+
     `<div class="grid" style="grid-template-columns:1.4fr 1fr;align-items:start">
       <div class="card"><div class="hd"><h3>Dispatch Details</h3></div><div class="bd">
         <div class="form-grid">
           <div class="field"><label>Customer *</label>
             <select id="f_cust" onchange="onCust(this.value)"><option value="">— Select Customer —</option>
-            ${DB.customers.map(c=>`<option value="${c.id}">${c.name} (${c.state})</option>`).join('')}</select></div>
+            ${DB.customers.map(c=>`<option value="${c.id}" ${c.id===form.customerId?'selected':''}>${esc(c.name)} (${esc(c.state)})</option>`).join('')}</select></div>
           <div class="field"><label>Site / Project</label>
-            <select id="f_site"><option value="">— Select Site —</option></select></div>
+            <select id="f_site"><option value="">— Select Site —</option>
+            ${DB.sites.filter(s=>s.customerId===form.customerId).map(s=>`<option value="${s.id}" ${s.id===form.siteId?'selected':''}>${esc(s.name)}</option>`).join('')}</select></div>
           <div class="field"><label>Concrete Grade *</label>
             <select id="f_grade" onchange="onGrade()"><option value="">— Select Grade —</option>
-            ${DB.grades.map(g=>`<option value="${g.id}">${g.name}</option>`).join('')}</select></div>
+            ${DB.grades.map(g=>`<option value="${g.id}" ${g.id===form.gradeId?'selected':''}>${esc(g.name)}</option>`).join('')}</select></div>
           <div class="field"><label>Vehicle &amp; Driver</label>
             <select id="f_veh"><option value="">— Select Vehicle —</option>
-            ${DB.vehicles.map(v=>`<option value="${v.id}">${v.number} — ${v.driver}</option>`).join('')}</select></div>
+            ${DB.vehicles.map(v=>`<option value="${v.id}" ${v.id===form.vehicleId?'selected':''}>${esc(v.number)} — ${esc(v.driver)}</option>`).join('')}</select></div>
           <div class="field"><label>Quantity (Cum) *</label>
-            <input id="f_qty" type="number" step="0.01" placeholder="e.g. 6.50" oninput="onCalc()"></div>
+            <input id="f_qty" type="number" step="0.01" value="${form.qty||''}" placeholder="e.g. 6.50" oninput="onCalc()"></div>
           <div class="field"><label>Rate per Cum (₹)</label>
-            <input id="f_rate" type="number" step="0.01" placeholder="auto from Rate Master" oninput="onCalc()"></div>
-          <div class="field"><label>Invoice Date</label><input id="f_date" type="date" value="${todayISO()}"></div>
+            <input id="f_rate" type="number" step="0.01" value="${form.rate||''}" placeholder="auto from Rate Master" oninput="onCalc()"></div>
+          <div class="field"><label>Pump Charges (₹)</label>
+            <input id="f_pump" type="number" step="0.01" value="${form.pump||''}" placeholder="0.00 (optional)" oninput="onCalc()"></div>
+          <div class="field"><label>GST on Pump</label>
+            <label style="display:flex;align-items:center;gap:8px;font-weight:500;font-size:13px;height:38px"><input type="checkbox" id="f_pumpgst" ${form.pumpGst?'checked':''} onchange="onCalc()" style="width:auto"> Apply GST on pump charges</label></div>
+          <div class="field"><label>Invoice Date</label><input id="f_date" type="date" value="${form.date}"></div>
           <div class="field"><label>Dispatched Through</label>
-            <select id="f_dispatch"><option>Transit Mixer</option><option>Tipper</option><option>Pump</option></select></div>
+            <select id="f_dispatch">${['Transit Mixer','Tipper','Pump'].map(o=>`<option ${o===form.dispatchThrough?'selected':''}>${o}</option>`).join('')}</select></div>
+          <div class="field"><label>Invoice Number ${unreg?'<span class="muted">(editable — unregistered buyer)</span>':''}</label>
+            <input id="f_no" value="${form.no||autoNo}" ${unreg?'':'readonly'} title="${unreg?'Editable for unregistered buyers':'Auto-numbered for registered buyers'}"></div>
         </div>
       </div></div>
       <div class="card"><div class="hd"><h3>Invoice Summary</h3></div><div class="bd">
         <div class="calc" id="calcBox">${calcBox()}</div>
-        <button class="btn gold" style="width:100%;justify-content:center;margin-top:14px" onclick="saveInvoice()">✔ Generate Invoice &amp; PDF</button>
+        <button class="btn gold" style="width:100%;justify-content:center;margin-top:14px" onclick="saveInvoice()">✔ ${ed?'Update Invoice & PDF':'Generate Invoice &amp; PDF'}</button>
+        ${ed?`<button class="btn ghost" style="width:100%;justify-content:center;margin-top:8px" onclick="go('invoices')">Cancel</button>`:''}
         <div class="muted small" style="margin-top:8px;font-size:11px;text-align:center">GST auto-set: <b>IGST 18%</b> for other states, <b>CGST 9% + SGST 9%</b> within Andhra Pradesh.</div>
       </div></div>
     </div>`;
 }
+function editInvoice(id){
+  current='newinvoice';
+  const nav=document.querySelector('.nav'); if(nav) nav.querySelectorAll('a').forEach(a=>a.classList.toggle('active',a.getAttribute('data-r')==='newinvoice'));
+  renderNewInvoice(id);
+}
 function onCust(cid){
   form.customerId=cid;
-  const opts=DB.sites.filter(s=>s.customerId===cid).map(s=>`<option value="${s.id}">${s.name}</option>`).join('');
+  const opts=DB.sites.filter(s=>s.customerId===cid).map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
   document.getElementById('f_site').innerHTML=`<option value="">— Select Site —</option>`+opts;
+  const c=customer(cid); const unreg = cid && !(c.gstin && c.gstin.trim());
+  const noEl=document.getElementById('f_no');
+  if(noEl){ noEl.readOnly=!unreg; if(!unreg) noEl.value = form.editId ? form.no : 'DNK/'+(DB.seq+1); }
   autoRate(); onCalc();
 }
 function onGrade(){ autoRate(); onCalc(); }
@@ -545,31 +669,34 @@ function readForm(){
   form.rate=parseFloat(document.getElementById('f_rate').value)||0;
   form.date=document.getElementById('f_date').value;
   form.dispatchThrough=document.getElementById('f_dispatch').value;
+  const pe=document.getElementById('f_pump'); form.pump=pe?(parseFloat(pe.value)||0):0;
+  const pg=document.getElementById('f_pumpgst'); form.pumpGst=!!(pg&&pg.checked);
+  const noEl=document.getElementById('f_no'); if(noEl) form.no=noEl.value.trim();
 }
 function onCalc(){ readForm(); document.getElementById('calcBox').innerHTML=calcBox(); }
 function calcBox(){
   const c=customer(form.customerId);
-  const noGst = form.customerId && !(c.gstin && c.gstin.trim());
-  const inter = c.stateCode && c.stateCode!==DB.company.stateCode;
   const g=grade(form.gradeId);
-  const rate = noGst ? 0 : (g.gst!=null?g.gst:18);
-  const taxable=round2((form.qty||0)*(form.rate||0));
-  const tax=round2(taxable*rate/100);
-  const grand=round2(taxable+tax);
-  const half=rate/2;
+  const pseudo={qty:form.qty||0,rate:form.rate||0,buyerGstin:c.gstin,buyerStateCode:c.stateCode,
+    gstRate:(g.gst!=null?g.gst:18),pump:form.pump||0,pumpGst:form.pumpGst};
+  const t=computeInvoice(pseudo,DB.company);
   let gstRows;
   if(!form.customerId) gstRows=`<div class="row muted"><span>GST</span><span>select customer</span></div>`;
-  else if(noGst) gstRows=`<div class="row" style="color:var(--green)"><span>GST</span><span><b>Not Applicable</b> (Domestic)</span></div>`;
-  else if(inter) gstRows=`<div class="row"><span>IGST @ ${rate}%</span><span>₹ ${inr(tax)}</span></div>`;
-  else gstRows=`<div class="row"><span>CGST @ ${half}%</span><span>₹ ${inr(round2(taxable*half/100))}</span></div>
-         <div class="row"><span>SGST @ ${half}%</span><span>₹ ${inr(round2(taxable*half/100))}</span></div>`;
+  else if(t.noGst) gstRows=`<div class="row" style="color:var(--green)"><span>GST</span><span><b>Not Applicable</b> (Domestic)</span></div>`;
+  else if(t.interState) gstRows=`<div class="row"><span>IGST @ ${t.gstRate}%</span><span>₹ ${inr(t.igst)}</span></div>`;
+  else gstRows=`<div class="row"><span>CGST @ ${t.gstRate/2}%</span><span>₹ ${inr(t.cgst)}</span></div>
+         <div class="row"><span>SGST @ ${t.gstRate/2}%</span><span>₹ ${inr(t.sgst)}</span></div>`;
   return `
-    <div class="row"><span>Taxable Value</span><span>₹ ${inr(taxable)}</span></div>
+    <div class="row"><span>Concrete (Taxable)</span><span>₹ ${inr(t.taxable)}</span></div>
+    ${t.pump>0?`<div class="row"><span>Pump Charges${t.pumpGst?' (+GST)':''}</span><span>₹ ${inr(t.pump)}</span></div>`:''}
     ${gstRows}
-    <div class="row total"><span>Grand Total</span><span>₹ ${inr(grand)}</span></div>
-    ${noGst?`<div class="muted" style="font-size:11px;margin-top:4px">No GSTIN on this customer → billed without GST (Bill of Supply).</div>`:''}
-    <div class="words">${taxable>0?numToWords(grand):'—'}</div>`;
+    <div class="row total"><span>Grand Total</span><span>₹ ${inr(t.grand)}</span></div>
+    ${t.noGst?`<div class="muted" style="font-size:11px;margin-top:4px">No GSTIN on this customer → billed without GST (Bill of Supply).</div>`:''}
+    <div class="words">${(t.taxable+t.pump)>0?numToWords(t.grand):'—'}</div>`;
 }
+/* Keep DB.seq aligned to the highest DNK/<n> in use, so deleting the latest
+   invoice frees its number and the next bill follows up sequentially. */
+function recomputeSeq(){ let mx=0; (DB.invoices||[]).forEach(i=>{ const m=/^DNK\/(\d+)$/.exec(i.no||''); if(m){ const n=+m[1]; if(n>mx) mx=n; } }); DB.seq=mx; }
 function saveInvoice(){
   if(!guardEdit())return;
   readForm();
@@ -577,11 +704,36 @@ function saveInvoice(){
   if(!form.gradeId){ return toast('Select a concrete grade','err'); }
   if(!form.qty||form.qty<=0){ return toast('Enter quantity','err'); }
   if(!form.rate||form.rate<=0){ return toast('Enter rate','err'); }
-  DB.seq+=1;
-  const inv={id:uid('i'),no:'DNK/'+DB.seq,date:form.date,customerId:form.customerId,siteId:form.siteId,
+  const c=customer(form.customerId);
+  const unreg = !(c.gstin && c.gstin.trim());
+  const autoNo='DNK/'+(DB.seq+1);
+  // ----- Edit existing invoice -----
+  if(form.editId){
+    const inv=DB.invoices.find(i=>i.id===form.editId); if(!inv) return toast('Invoice not found','err');
+    let no=inv.no;
+    if(unreg && form.no){
+      if(form.no!==inv.no && DB.invoices.some(x=>x.id!==inv.id && x.no===form.no)) return toast('Invoice number already exists','err');
+      no=form.no;
+    }
+    Object.assign(inv,{no,date:form.date,customerId:form.customerId,siteId:form.siteId,gradeId:form.gradeId,
+      vehicleId:form.vehicleId,qty:form.qty,rate:form.rate,pump:round2(form.pump||0),pumpGst:!!form.pumpGst,
+      terms:form.terms,dispatchThrough:form.dispatchThrough});
+    recomputeSeq();
+    logAct('Invoice updated',inv.no+' — '+(customer(inv.customerId).name||''));
+    save(); toast('Invoice '+inv.no+' updated','ok'); printInvoice(inv.id); go('invoices'); return;
+  }
+  // ----- New invoice -----
+  let no=autoNo;
+  if(unreg && form.no && form.no!==autoNo){           // custom manual number (unregistered only)
+    if(DB.invoices.some(x=>x.no===form.no)) return toast('Invoice number already exists','err');
+    no=form.no;
+  }
+  const inv={id:uid('i'),no,date:form.date,customerId:form.customerId,siteId:form.siteId,
     gradeId:form.gradeId,vehicleId:form.vehicleId,qty:form.qty,rate:form.rate,unit:'Cum',
+    pump:round2(form.pump||0),pumpGst:!!form.pumpGst,
     terms:form.terms,dispatchThrough:form.dispatchThrough,paid:0,createdAt:todayISO(),at:nowStamp()};
   DB.invoices.push(inv);
+  recomputeSeq();
   logAct('Invoice created',inv.no+' — '+(customer(inv.customerId).name||'')+', '+(grade(inv.gradeId).name||'')+' '+inv.qty+' Cum, ₹'+inr(invTotals(inv).grand));
   save();
   toast('Invoice '+inv.no+' generated','ok');
@@ -602,7 +754,7 @@ function renderInvoices(){
       <input class="search" id="invSearch" placeholder="🔍 Search invoice no, customer, grade, vehicle…" value="${invSearch}" oninput="invSearch=this.value;drawInvList()">
       <select id="invCust" onchange="invCust=this.value;drawInvList()" style="max-width:230px">
         <option value="">All customers</option>
-        ${DB.customers.map(c=>`<option value="${c.id}" ${invCust===c.id?'selected':''}>${c.name}</option>`).join('')}
+        ${DB.customers.map(c=>`<option value="${c.id}" ${invCust===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}
       </select>
       <button class="btn ghost" onclick="exportInvoicesCSV(invCust)">⬇ Invoices CSV</button>
       <button class="btn ghost" onclick="zipModal()">🗜 Bulk ZIP</button>
@@ -624,20 +776,21 @@ function drawInvList(){
     list.map(i=>{const t=invTotals(i);const due=t.grand-(i.paid||0);
       const st=due<=0.5?'<span class="pill paid">Paid</span>':(i.paid>0?'<span class="pill part">Partial</span>':'<span class="pill due">Due</span>');
       return `<tr>
-        <td><b>${i.no}</b></td><td>${fmtDate(i.date)}</td><td>${customer(i.customerId).name}</td>
-        <td>${grade(i.gradeId).name}</td><td class="num">${i.qty.toFixed(2)}</td>
+        <td><b>${esc(i.no)}</b></td><td>${fmtDate(i.date)}</td><td>${esc(customer(i.customerId).name)}</td>
+        <td>${esc(grade(i.gradeId).name)}</td><td class="num">${i.qty.toFixed(2)}</td>
         <td class="num"><b>₹${inr(t.grand)}</b></td><td class="num">${due>0.5?'₹'+inr(due):'—'}</td><td>${st}</td>
         <td class="right">
           <button class="btn ghost sm" onclick="printInvoice('${i.id}')">🧾 Invoice</button>
           <button class="btn ghost sm" onclick="printChallan('${i.id}')">📄 Challan</button>
           <button class="btn ghost sm" onclick="printBatch('${i.id}')">🧪 Batch Slip</button>
+          ${canEdit()?`<button class="btn ghost sm" onclick="editInvoice('${i.id}')">✎ Edit</button>`:''}
           ${due>0.5?`<button class="btn green sm" onclick="payModal('${i.id}')">💰 Pay</button>`:''}
           <button class="btn danger sm" onclick="delInvoice('${i.id}')">✕</button>
         </td></tr>`;}).join('')+`</tbody></table>`
     :`<div class="empty">No matching invoices.</div>`);
 }
 function delInvoice(id){ if(!guardEdit())return; const i=DB.invoices.find(x=>x.id===id);
-  if(confirm('Delete invoice '+i.no+'? This cannot be undone.')){ DB.invoices=DB.invoices.filter(x=>x.id!==id); logAct('Invoice deleted',i.no); save(); drawInvList(); toast('Invoice deleted'); } }
+  if(confirm('Delete invoice '+i.no+'? This cannot be undone.')){ DB.invoices=DB.invoices.filter(x=>x.id!==id); recomputeSeq(); logAct('Invoice deleted',i.no); save(); drawInvList(); toast('Invoice deleted — numbering updated'); } }
 
 /* ---------------- Payments / Outstanding ---------------- */
 function renderPayments(){
@@ -653,7 +806,7 @@ function renderPayments(){
     </div>
     <div class="card"><div class="hd"><h3>Pending Bills</h3></div><div class="bd" style="padding:0">
     ${due.length?`<table class="table"><thead><tr><th>Invoice #</th><th>Date</th><th>Customer</th><th class="num">Total</th><th class="num">Paid</th><th class="num">Due</th><th class="right"></th></tr></thead><tbody>`+
-      due.map(({i,t})=>`<tr><td><b>${i.no}</b></td><td>${fmtDate(i.date)}</td><td>${customer(i.customerId).name}</td>
+      due.map(({i,t})=>`<tr><td><b>${esc(i.no)}</b></td><td>${fmtDate(i.date)}</td><td>${esc(customer(i.customerId).name)}</td>
         <td class="num">₹${inr(t.grand)}</td><td class="num">₹${inr(i.paid||0)}</td><td class="num"><b>₹${inr(t.grand-(i.paid||0))}</b></td>
         <td class="right"><button class="btn green sm" onclick="payModal('${i.id}')">💰 Record Payment</button></td></tr>`).join('')+
       `</tbody></table>`:`<div class="empty">🎉 No outstanding payments. All bills cleared.</div>`}
@@ -667,8 +820,8 @@ function paymentsLedger(){
   return `<div class="card" style="margin-top:16px"><div class="hd"><h3>Recent Payments (timestamped)</h3></div><div class="bd" style="padding:0">
     <table class="table"><thead><tr><th>Date / Time</th><th>Invoice</th><th>Customer</th><th class="num">Amount</th><th>Received by</th></tr></thead><tbody>`+
     pays.map(p=>{const i=DB.invoices.find(x=>x.id===p.invoiceId)||{};
-      return `<tr><td style="white-space:nowrap">${p.at||fmtDate(p.date)}</td><td><b>${i.no||'-'}</b></td>
-      <td>${customer(i.customerId).name||'-'}</td><td class="num">₹${inr(p.amount)}</td><td>${p.by||'-'}</td></tr>`;}).join('')+
+      return `<tr><td style="white-space:nowrap">${esc(p.at||fmtDate(p.date))}</td><td><b>${esc(i.no)||'-'}</b></td>
+      <td>${esc(customer(i.customerId).name)||'-'}</td><td class="num">₹${inr(p.amount)}</td><td>${esc(p.by)||'-'}</td></tr>`;}).join('')+
     `</tbody></table></div></div>`;
 }
 function payModal(id){
@@ -705,7 +858,7 @@ function renderCustomers(){
     const inter=c.stateCode!==DB.company.stateCode;
     const taxTag = noGst?'<span class="pill nogst">No GST (Domestic)</span>':(inter?'<span class="pill igst">IGST</span>':'<span class="pill gst">CGST/SGST</span>');
     const cnt=DB.invoices.filter(i=>i.customerId===c.id).length;
-    return `<tr><td><b>${c.name}</b></td><td>${c.gstin||'—'}</td><td>${c.state} ${taxTag}</td>
+    return `<tr><td><b>${esc(c.name)}</b></td><td>${c.gstin?esc(c.gstin):'—'}</td><td>${esc(c.state)} ${taxTag}</td>
       <td class="num">${cnt}</td>
       <td class="right">
         <button class="btn ghost sm" onclick="exportInvoicesCSV('${c.id}')" title="Download this customer's invoices">⬇ Invoices</button>
@@ -720,20 +873,22 @@ function custModal(id){
   const c=id?customer(id):{name:'',gstin:'',state:'',stateCode:'',address:'',phone:''};
   modal((id?'Edit':'Add')+' Customer',
     `<div class="form-grid">
-      <div class="field full"><label>Customer Name *</label><input id="c_name" value="${c.name||''}"></div>
-      <div class="field"><label>GSTIN/UIN</label><input id="c_gstin" value="${c.gstin||''}" oninput="c_autostate()" placeholder="e.g. 24AEBFS2259C1ZE"></div>
-      <div class="field"><label>Phone</label><input id="c_phone" value="${c.phone||''}"></div>
-      <div class="field"><label>State</label><input id="c_state" value="${c.state||''}"></div>
-      <div class="field"><label>State Code</label><input id="c_scode" value="${c.stateCode||''}" placeholder="from GSTIN (first 2 digits)"></div>
-      <div class="field full"><label>Address</label><textarea id="c_addr" rows="3">${c.address||''}</textarea></div>
+      <div class="field full"><label>Customer Name *</label><input id="c_name" value="${esc(c.name)}"></div>
+      <div class="field"><label>GSTIN/UIN</label><input id="c_gstin" value="${esc(c.gstin)}" maxlength="15" oninput="upperInput('c_gstin');c_autostate()" placeholder="e.g. 24AEBFS2259C1ZE"></div>
+      <div class="field"><label>Phone</label><input id="c_phone" value="${esc(c.phone)}" maxlength="10" inputmode="numeric" oninput="digitsInput('c_phone',10)"></div>
+      <div class="field"><label>State</label><input id="c_state" value="${esc(c.state)}"></div>
+      <div class="field"><label>State Code</label><input id="c_scode" value="${esc(c.stateCode)}" placeholder="from GSTIN (first 2 digits)"></div>
+      <div class="field full"><label>Address</label><textarea id="c_addr" rows="3">${esc(c.address)}</textarea></div>
     </div>`,
     `<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" onclick="saveCust('${id||''}')">Save</button>`);
 }
 function c_autostate(){ const g=document.getElementById('c_gstin').value; if(g.length>=2 && /^\d{2}/.test(g)){ document.getElementById('c_scode').value=g.slice(0,2);} }
 function saveCust(id){
   if(!guardEdit())return;
-  const o={name:val('c_name'),gstin:val('c_gstin'),state:val('c_state'),stateCode:val('c_scode'),address:val('c_addr'),phone:val('c_phone')};
+  const o={name:val('c_name'),gstin:val('c_gstin').toUpperCase(),state:val('c_state'),stateCode:val('c_scode'),address:val('c_addr'),phone:val('c_phone')};
   if(!o.name)return toast('Name required','err');
+  if(o.gstin && !gstinValid(o.gstin))return toast('Invalid GSTIN — format: 22AAAAA0000A1Z5','err');
+  if(!phoneOk(o.phone))return toast('Phone must be up to 10 digits','err');
   if(id){ Object.assign(customer(id),o); } else { DB.customers.push({id:uid('c'),...o}); }
   save(); closeModal(); toast('Customer saved','ok'); renderCustomers();
 }
@@ -742,8 +897,8 @@ function delCust(id){ if(!guardEdit())return; if(DB.invoices.some(i=>i.customerI
 
 /* Sites */
 function renderSites(){
-  const rows=DB.sites.map(s=>`<tr><td><b>${s.name}</b></td><td>${customer(s.customerId).name||'-'}</td>
-    <td>${(s.address||'').replace(/\n/g,', ')}</td>
+  const rows=DB.sites.map(s=>`<tr><td><b>${esc(s.name)}</b></td><td>${esc(customer(s.customerId).name)||'-'}</td>
+    <td>${esc((s.address||'').replace(/\n/g,', '))}</td>
     <td class="right"><button class="btn ghost sm" onclick="siteModal('${s.id}')">✎ Edit</button><button class="btn danger sm" onclick="delSite('${s.id}')">✕</button></td></tr>`).join('');
   masterPage('Sites / Projects','Delivery locations linked to each customer','Add Site','siteModal()',
     `<table class="table"><thead><tr><th>Site / Project</th><th>Customer</th><th>Address</th><th class="right"></th></tr></thead><tbody>${rows}</tbody></table>${DB.sites.length?'':'<div class="empty">No sites</div>'}`);
@@ -752,9 +907,9 @@ function siteModal(id){
   const s=id?site(id):{name:'',customerId:'',address:''};
   modal((id?'Edit':'Add')+' Site',
     `<div class="form-grid">
-      <div class="field full"><label>Customer *</label><select id="s_cust">${DB.customers.map(c=>`<option value="${c.id}" ${c.id===s.customerId?'selected':''}>${c.name}</option>`).join('')}</select></div>
-      <div class="field full"><label>Site / Project Name *</label><input id="s_name" value="${s.name||''}"></div>
-      <div class="field full"><label>Address</label><textarea id="s_addr" rows="3">${s.address||''}</textarea></div>
+      <div class="field full"><label>Customer *</label><select id="s_cust">${DB.customers.map(c=>`<option value="${c.id}" ${c.id===s.customerId?'selected':''}>${esc(c.name)}</option>`).join('')}</select></div>
+      <div class="field full"><label>Site / Project Name *</label><input id="s_name" value="${esc(s.name)}"></div>
+      <div class="field full"><label>Address</label><textarea id="s_addr" rows="3">${esc(s.address)}</textarea></div>
     </div>`,
     `<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" onclick="saveSite('${id||''}')">Save</button>`);
 }
@@ -766,7 +921,7 @@ function delSite(id){ if(!guardEdit())return; if(confirm('Delete site?')){ DB.si
 
 /* Vehicles */
 function renderVehicles(){
-  const rows=DB.vehicles.map(v=>`<tr><td><b>${v.number}</b></td><td>${v.driver||'-'}</td><td>${v.driverPhone||'-'}</td><td>${v.capacity||'-'} Cum</td>
+  const rows=DB.vehicles.map(v=>`<tr><td><b>${esc(v.number)}</b></td><td>${esc(v.driver)||'-'}</td><td>${esc(v.driverPhone)||'-'}</td><td>${esc(v.capacity)||'-'} Cum</td>
     <td class="right"><button class="btn ghost sm" onclick="vehModal('${v.id}')">✎ Edit</button><button class="btn danger sm" onclick="delVeh('${v.id}')">✕</button></td></tr>`).join('');
   masterPage('Vehicles & Drivers','Transit mixers and assigned drivers','Add Vehicle','vehModal()',
     `<table class="table"><thead><tr><th>Vehicle No.</th><th>Driver</th><th>Driver Phone</th><th>Capacity</th><th class="right"></th></tr></thead><tbody>${rows}</tbody></table>${DB.vehicles.length?'':'<div class="empty">No vehicles</div>'}`);
@@ -775,22 +930,23 @@ function vehModal(id){
   const v=id?vehicle(id):{number:'',driver:'',driverPhone:'',capacity:''};
   modal((id?'Edit':'Add')+' Vehicle',
     `<div class="form-grid">
-      <div class="field"><label>Vehicle Number *</label><input id="v_num" value="${v.number||''}" placeholder="AP39WQ0715"></div>
-      <div class="field"><label>Capacity (Cum)</label><input id="v_cap" value="${v.capacity||''}"></div>
-      <div class="field"><label>Driver Name</label><input id="v_drv" value="${v.driver||''}"></div>
-      <div class="field"><label>Driver Phone</label><input id="v_ph" value="${v.driverPhone||''}"></div>
+      <div class="field"><label>Vehicle Number *</label><input id="v_num" value="${v.number||''}" oninput="plateInput('v_num')" placeholder="AP39WQ0715"></div>
+      <div class="field"><label>Capacity (Cum)</label><input id="v_cap" value="${v.capacity||''}" inputmode="decimal" oninput="decimalInput('v_cap')"></div>
+      <div class="field"><label>Driver Name</label><input id="v_drv" value="${v.driver||''}" oninput="lettersInput('v_drv')"></div>
+      <div class="field"><label>Driver Phone</label><input id="v_ph" value="${v.driverPhone||''}" maxlength="10" inputmode="numeric" oninput="digitsInput('v_ph',10)"></div>
     </div>`,
     `<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" onclick="saveVeh('${id||''}')">Save</button>`);
 }
-function saveVeh(id){ if(!guardEdit())return; const o={number:val('v_num'),driver:val('v_drv'),driverPhone:val('v_ph'),capacity:val('v_cap')};
+function saveVeh(id){ if(!guardEdit())return; const o={number:val('v_num').toUpperCase(),driver:val('v_drv'),driverPhone:val('v_ph'),capacity:val('v_cap')};
   if(!o.number)return toast('Vehicle number required','err');
+  if(!phoneOk(o.driverPhone))return toast('Driver phone must be up to 10 digits','err');
   if(id){Object.assign(vehicle(id),o);}else{DB.vehicles.push({id:uid('v'),...o});}
   save();closeModal();toast('Vehicle saved','ok');renderVehicles(); }
 function delVeh(id){ if(!guardEdit())return; if(confirm('Delete vehicle?')){ DB.vehicles=DB.vehicles.filter(v=>v.id!==id); save(); renderVehicles(); } }
 
 /* Grades */
 function renderGrades(){
-  const rows=DB.grades.map(g=>`<tr><td><b>${g.name}</b></td><td>${g.hsn}</td><td>${g.gst}%</td>
+  const rows=DB.grades.map(g=>`<tr><td><b>${esc(g.name)}</b></td><td>${esc(g.hsn)}</td><td>${g.gst}%</td>
     <td class="right"><button class="btn ghost sm" onclick="gradeModal('${g.id}')">✎ Edit</button><button class="btn danger sm" onclick="delGrade('${g.id}')">✕</button></td></tr>`).join('');
   masterPage('Concrete Grades','Product master — M15, M20, M20S, M25, M30…','Add Grade','gradeModal()',
     `<table class="table"><thead><tr><th>Grade</th><th>HSN/SAC</th><th>GST Rate</th><th class="right"></th></tr></thead><tbody>${rows}</tbody></table>`);
@@ -800,8 +956,8 @@ function gradeModal(id){
   const m=g.mix||{...DEFAULT_MIX};
   modal((id?'Edit':'Add')+' Grade',
     `<div class="form-grid">
-      <div class="field"><label>Grade Name *</label><input id="g_name" value="${g.name||''}" placeholder="M-30"></div>
-      <div class="field"><label>HSN/SAC</label><input id="g_hsn" value="${g.hsn||'38245010'}"></div>
+      <div class="field"><label>Grade Name *</label><input id="g_name" value="${esc(g.name)}" placeholder="M-30"></div>
+      <div class="field"><label>HSN/SAC</label><input id="g_hsn" value="${esc(g.hsn)||'38245010'}"></div>
       <div class="field"><label>GST Rate (%)</label><input id="g_gst" type="number" value="${g.gst!=null?g.gst:18}"></div>
     </div>
     <label style="display:block;margin:14px 0 6px">Mix Design — per Cubic Metre (used on batching slips)</label>
@@ -825,7 +981,7 @@ function delGrade(id){ if(!guardEdit())return; if(confirm('Delete grade?')){ DB.
 
 /* Rates */
 function renderRates(){
-  const rows=DB.rates.map(r=>`<tr><td><b>${customer(r.customerId).name||'-'}</b></td><td>${grade(r.gradeId).name||'-'}</td>
+  const rows=DB.rates.map(r=>`<tr><td><b>${esc(customer(r.customerId).name)||'-'}</b></td><td>${esc(grade(r.gradeId).name)||'-'}</td>
     <td class="num">₹${inr(r.rate)} / Cum</td>
     <td class="right"><button class="btn ghost sm" onclick="rateModal('${r.id}')">✎ Edit</button><button class="btn danger sm" onclick="delRate('${r.id}')">✕</button></td></tr>`).join('');
   masterPage('Rate Master','Customer-wise &amp; grade-wise rates — auto-filled on billing','Add Rate','rateModal()',
@@ -835,8 +991,8 @@ function rateModal(id){
   const r=id?DB.rates.find(x=>x.id===id):{customerId:'',gradeId:'',rate:''};
   modal((id?'Edit':'Add')+' Rate',
     `<div class="form-grid">
-      <div class="field"><label>Customer *</label><select id="rt_cust">${DB.customers.map(c=>`<option value="${c.id}" ${c.id===r.customerId?'selected':''}>${c.name}</option>`).join('')}</select></div>
-      <div class="field"><label>Grade *</label><select id="rt_grade">${DB.grades.map(g=>`<option value="${g.id}" ${g.id===r.gradeId?'selected':''}>${g.name}</option>`).join('')}</select></div>
+      <div class="field"><label>Customer *</label><select id="rt_cust">${DB.customers.map(c=>`<option value="${c.id}" ${c.id===r.customerId?'selected':''}>${esc(c.name)}</option>`).join('')}</select></div>
+      <div class="field"><label>Grade *</label><select id="rt_grade">${DB.grades.map(g=>`<option value="${g.id}" ${g.id===r.gradeId?'selected':''}>${esc(g.name)}</option>`).join('')}</select></div>
       <div class="field full"><label>Rate per Cum (₹) *</label><input id="rt_rate" type="number" step="0.01" value="${r.rate||''}"></div>
     </div>`,
     `<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" onclick="saveRate('${id||''}')">Save</button>`);
@@ -863,19 +1019,22 @@ function renderReports(){
   DB.invoices.forEach(i=>{const t=invTotals(i);const k=i.customerId;
     byCust[k]=byCust[k]||{count:0,grand:0,due:0};byCust[k].count++;byCust[k].grand+=t.grand;byCust[k].due+=t.grand-(i.paid||0);});
   const custRows=Object.keys(byCust).map(k=>{const d=byCust[k];
-    return `<tr><td><b>${customer(k).name}</b></td><td class="num">${d.count}</td><td class="num">₹${inr(d.grand)}</td><td class="num">₹${inr(d.due)}</td></tr>`;}).join('');
+    return `<tr><td><b>${esc(customer(k).name)}</b></td><td class="num">${d.count}</td><td class="num">₹${inr(d.grand)}</td><td class="num">₹${inr(d.due)}</td></tr>`;}).join('');
 
   document.getElementById('main').innerHTML=topbar('Reports &amp; Export','Sales summaries + customer-wise invoice &amp; toll downloads')+
     `<div class="toolbar">
       <button class="btn ghost" onclick="exportInvoicesCSV()">⬇ All Invoices (Excel/CSV)</button>
       <button class="btn ghost" onclick="exportMonthlyCSV()">⬇ Monthly Summary (CSV)</button>
+      <label style="font-size:12px;color:var(--muted)">GST Register</label>
+      <input type="month" id="gstMonth" value="${todayISO().slice(0,7)}" style="max-width:150px">
+      <button class="btn ghost" onclick="exportGSTRegister(document.getElementById('gstMonth').value)">⬇ GST Sales Register</button>
       <button class="btn ghost" onclick="zipModal()">🗜 Bulk Invoice ZIP</button>
     </div>
     <div class="card" style="margin-bottom:16px"><div class="hd"><h3>Customer Statement &amp; Toll Register</h3></div><div class="bd">
       <div class="toolbar" style="margin:0">
         <select id="repCust" onchange="drawTollPreview()" style="max-width:280px">
           <option value="">— Select customer —</option>
-          ${DB.customers.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}
+          ${DB.customers.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}
         </select>
         <button class="btn ghost" onclick="exportTollCSV(repCustVal())">⬇ Toll Register (CSV)</button>
         <button class="btn ghost" onclick="exportInvoicesCSV(repCustVal())">⬇ Invoices (CSV)</button>
@@ -910,6 +1069,25 @@ function downloadCSV(name,rows){
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();
   toast('Exported '+name,'ok');
 }
+/* GST Sales Register — Tally-style monthly export (matches GST Format template) */
+function exportGSTRegister(ym){
+  ym=ym||todayISO().slice(0,7);
+  const co=DB.company;
+  const invs=DB.invoices.filter(i=>(i.date||'').slice(0,7)===ym).slice().sort((a,b)=>(a.date+a.no).localeCompare(b.date+b.no));
+  if(!invs.length) return toast('No invoices in '+monthName(ym),'err');
+  const rows=[[co.name],['Sales Register'],[monthName(ym)],
+    ['Date','Particulars','Voucher Type','Voucher No.','Voucher Ref. No.','GSTIN/UIN','GRADE','Qty','Gross Total','Local Sales @ 18%','Output CGST @ 9%','Output SGST @ 9%','Interstate Sales @ 18%','Output IGST @ 18%','Round Off']];
+  let tG=0,tLocal=0,tC=0,tS=0,tInter=0,tI=0;
+  invs.forEach(i=>{const h=hydrate(i);const t=invTotals(i);
+    const gross=round2(t.grand);
+    const roundOff=round2(Math.round(gross)-gross);
+    const local=(!t.noGst&&!t.interState)?t.baseTaxable:'';
+    const inter=(!t.noGst&&t.interState)?t.baseTaxable:'';
+    tG+=gross;tLocal+=(local||0);tC+=t.cgst;tS+=t.sgst;tInter+=(inter||0);tI+=t.igst;
+    rows.push([fmtDate(i.date),h.buyerName,'Sales',i.no,i.no,h.buyerGstin||'',h.gradeName,i.qty,gross,local,t.cgst||'',t.sgst||'',inter,t.igst||'',roundOff||'']);});
+  rows.push(['','','','','','','TOTAL','',round2(tG),round2(tLocal),round2(tC),round2(tS),round2(tInter),round2(tI),'']);
+  downloadCSV('DNK_GST_SalesRegister_'+ym+'.csv',rows);
+}
 function exportInvoicesCSV(customerId){
   const rows=[['Invoice No','Date','Customer','GSTIN','State','Site','Grade','HSN','Vehicle','Qty(Cum)','Rate','Taxable','GST Type','GST Amt','Grand Total','Paid','Due']];
   DB.invoices.filter(i=>!customerId||i.customerId===customerId).slice().sort((a,b)=>a.no.localeCompare(b.no)).forEach(i=>{const h=hydrate(i);const t=invTotals(i);
@@ -939,18 +1117,18 @@ function printStatement(customerId){
   const totBasic=rows.reduce((s,r)=>s+r.basic,0), totGst=rows.reduce((s,r)=>s+r.gst,0), totFinal=rows.reduce((s,r)=>s+r.final,0);
   const paid=DB.invoices.filter(i=>i.customerId===customerId).reduce((s,i)=>s+(i.paid||0),0);
   const co=DB.company;
-  const html=`<!doctype html><html><head><meta charset="utf-8"><title>Statement — ${c.name}</title>
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>Statement — ${esc(c.name)}</title>
     <style>body{font-family:"Segoe UI",Arial,sans-serif;color:#111;font-size:12px;padding:16px}
     h2{margin:0}.muted{color:#666}table{border-collapse:collapse;width:100%;margin-top:10px}
     td,th{border:1px solid #999;padding:4px 6px}.r{text-align:right}th{background:#f0f0f0}
     .head{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #14508c;padding-bottom:8px}
     .tot td{font-weight:700;background:#fafafa}</style></head><body>
-    <div class="head"><div><h2>${co.name}</h2><div class="muted">${co.addressLines.join(', ')}<br>GSTIN: ${co.gstin}</div></div>
+    <div class="head"><div><h2>${esc(co.name)}</h2><div class="muted">${esc(co.addressLines.join(', '))}<br>GSTIN: ${esc(co.gstin)}</div></div>
       <img src="${window.LOGO_DATA}" style="width:70px;height:70px;object-fit:contain"></div>
     <h3 style="margin:12px 0 0">Customer Account Statement / Toll Register</h3>
-    <div class="muted">Customer: <b>${c.name}</b> ${c.gstin?('• GSTIN '+c.gstin):'• Domestic (No GST)'} • As on ${fmtDate(todayISO())}</div>
+    <div class="muted">Customer: <b>${esc(c.name)}</b> ${c.gstin?('• GSTIN '+esc(c.gstin)):'• Domestic (No GST)'} • As on ${fmtDate(todayISO())}</div>
     <table><thead><tr><th>Date</th><th>Grade</th><th class="r">Load (Cum)</th><th class="r">Rate</th><th class="r">Basic</th><th class="r">GST</th><th class="r">Final</th><th class="r">Running Total</th><th>Vehicle</th><th>Invoice</th></tr></thead>
-    <tbody>${rows.map(r=>`<tr><td>${fmtDate(r.date)}</td><td>${r.grade}</td><td class="r">${r.load.toFixed(2)}</td><td class="r">${inr(r.rate)}</td><td class="r">${inr(r.basic)}</td><td class="r">${inr(r.gst)}</td><td class="r">${inr(r.final)}</td><td class="r">${inr(r.running)}</td><td>${r.vehicle}</td><td>${r.invoice}</td></tr>`).join('')}
+    <tbody>${rows.map(r=>`<tr><td>${fmtDate(r.date)}</td><td>${esc(r.grade)}</td><td class="r">${r.load.toFixed(2)}</td><td class="r">${inr(r.rate)}</td><td class="r">${inr(r.basic)}</td><td class="r">${inr(r.gst)}</td><td class="r">${inr(r.final)}</td><td class="r">${inr(r.running)}</td><td>${esc(r.vehicle)}</td><td>${esc(r.invoice)}</td></tr>`).join('')}
     <tr class="tot"><td colspan="4" class="r">Total</td><td class="r">${inr(totBasic)}</td><td class="r">${inr(totGst)}</td><td class="r">${inr(totFinal)}</td><td colspan="3"></td></tr></tbody></table>
     <div style="margin-top:12px"><b>Grand Total:</b> ₹${inr(totFinal)} &nbsp;•&nbsp; <b>Received:</b> ₹${inr(paid)} &nbsp;•&nbsp; <b>Balance Due:</b> ₹${inr(round2(totFinal-paid))}</div>
     <div class="muted" style="margin-top:6px">${numToWords(round2(totFinal-paid))} outstanding</div>
@@ -974,16 +1152,16 @@ function renderSettings(){
     `<div class="grid" style="grid-template-columns:1.3fr 1fr;align-items:start">
       <div class="card"><div class="hd"><h3>Company Details (appears on invoice)</h3></div><div class="bd">
         <div class="form-grid">
-          <div class="field full"><label>Company Name</label><input id="co_name" value="${co.name}"></div>
-          <div class="field"><label>GSTIN/UIN</label><input id="co_gstin" value="${co.gstin}"></div>
-          <div class="field"><label>State (Code)</label><input id="co_state" value="${co.stateName}"><input type="hidden" id="co_scode" value="${co.stateCode}"></div>
-          <div class="field"><label>Email</label><input id="co_email" value="${co.email}"></div>
-          <div class="field"><label>Phone</label><input id="co_phone" value="${co.phone}"></div>
-          <div class="field full"><label>Address (one line each)</label><textarea id="co_addr" rows="4">${co.addressLines.join('\n')}</textarea></div>
-          <div class="field"><label>Bank</label><input id="co_bank" value="${co.bank.bank}"></div>
-          <div class="field"><label>A/c No.</label><input id="co_acno" value="${co.bank.acno}"></div>
-          <div class="field"><label>Branch</label><input id="co_branch" value="${co.bank.branch}"></div>
-          <div class="field"><label>IFSC</label><input id="co_ifsc" value="${co.bank.ifsc}"></div>
+          <div class="field full"><label>Company Name</label><input id="co_name" value="${esc(co.name)}"></div>
+          <div class="field"><label>GSTIN/UIN</label><input id="co_gstin" value="${esc(co.gstin)}" maxlength="15" oninput="upperInput('co_gstin')"></div>
+          <div class="field"><label>State (Code)</label><input id="co_state" value="${esc(co.stateName)}"><input type="hidden" id="co_scode" value="${esc(co.stateCode)}"></div>
+          <div class="field"><label>Email</label><input id="co_email" value="${esc(co.email)}"></div>
+          <div class="field"><label>Phone</label><input id="co_phone" value="${esc(co.phone)}" maxlength="10" inputmode="numeric" oninput="digitsInput('co_phone',10)"></div>
+          <div class="field full"><label>Address (one line each)</label><textarea id="co_addr" rows="4">${esc(co.addressLines.join('\n'))}</textarea></div>
+          <div class="field"><label>Bank</label><input id="co_bank" value="${esc(co.bank.bank)}"></div>
+          <div class="field"><label>A/c No.</label><input id="co_acno" value="${esc(co.bank.acno)}"></div>
+          <div class="field"><label>Branch</label><input id="co_branch" value="${esc(co.bank.branch)}"></div>
+          <div class="field"><label>IFSC</label><input id="co_ifsc" value="${esc(co.bank.ifsc)}"></div>
         </div>
         <button class="btn" style="margin-top:14px" onclick="saveCompany()">Save Company</button>
       </div></div>
@@ -1017,7 +1195,10 @@ function toggleFeature(k,on){
 }
 function saveCompany(){
   const co=DB.company;
-  co.name=val('co_name');co.gstin=val('co_gstin');co.stateName=val('co_state');co.stateCode=val('co_scode');
+  const gst=val('co_gstin').toUpperCase();
+  if(gst && !gstinValid(gst))return toast('Invalid GSTIN — format: 22AAAAA0000A1Z5','err');
+  if(!phoneOk(val('co_phone')))return toast('Phone must be up to 10 digits','err');
+  co.name=val('co_name');co.gstin=gst;co.stateName=val('co_state');co.stateCode=val('co_scode');
   co.email=val('co_email');co.phone=val('co_phone');co.addressLines=val('co_addr').split('\n').filter(Boolean);
   co.bank.bank=val('co_bank');co.bank.acno=val('co_acno');co.bank.branch=val('co_branch');co.bank.ifsc=val('co_ifsc');co.bank.name=co.name;
   if(co.gstin.length>=2)co.stateCode=co.gstin.slice(0,2);
@@ -1118,9 +1299,9 @@ function renderLeads(){
    </div>
    <div class="card"><div class="bd" style="padding:0">
      <table class="table"><thead><tr><th>Lead</th><th>Contact</th><th>Requirement</th><th class="num">Value</th><th>Status</th><th>Next Follow-up</th><th class="right"></th></tr></thead><tbody>
-     ${leads.map(l=>`<tr><td><b>${l.name}</b><br><span class="muted" style="font-size:11px">${l.source||''}</span></td>
-       <td>${l.contact||''}<br><span class="muted" style="font-size:11px">${l.phone||''}</span></td>
-       <td style="max-width:230px">${l.requirement||''}</td><td class="num">₹${inr(l.value||0)}</td>
+     ${leads.map(l=>`<tr><td><b>${esc(l.name)}</b><br><span class="muted" style="font-size:11px">${esc(l.source)}</span></td>
+       <td>${esc(l.contact)}<br><span class="muted" style="font-size:11px">${esc(l.phone)}</span></td>
+       <td style="max-width:230px">${esc(l.requirement)}</td><td class="num">₹${inr(l.value||0)}</td>
        <td>${statusPill(l.status)}</td><td>${l.nextFollowup?fmtDate(l.nextFollowup):'-'}</td>
        <td class="right"><button class="btn ghost sm" onclick="leadModal('${l.id}')">✎</button><button class="btn danger sm" onclick="delLead('${l.id}')">✕</button></td></tr>`).join('')}
      </tbody></table>${leads.length?'':'<div class="empty">No leads yet.</div>'}
@@ -1130,21 +1311,22 @@ function leadModal(id){
   const l=id?DB.leads.find(x=>x.id===id):{name:'',contact:'',phone:'',source:'',requirement:'',value:'',status:'New',nextFollowup:todayISO(),notes:''};
   modal((id?'Edit':'Add')+' Lead',
    `<div class="form-grid">
-      <div class="field"><label>Lead / Company *</label><input id="ld_name" value="${l.name||''}"></div>
-      <div class="field"><label>Contact Person</label><input id="ld_contact" value="${l.contact||''}"></div>
-      <div class="field"><label>Phone</label><input id="ld_phone" value="${l.phone||''}"></div>
-      <div class="field"><label>Source</label><input id="ld_source" value="${l.source||''}" placeholder="Reference / Website / Tender"></div>
-      <div class="field full"><label>Requirement</label><input id="ld_req" value="${l.requirement||''}"></div>
+      <div class="field"><label>Lead / Company *</label><input id="ld_name" value="${esc(l.name)}"></div>
+      <div class="field"><label>Contact Person</label><input id="ld_contact" value="${esc(l.contact)}"></div>
+      <div class="field"><label>Phone</label><input id="ld_phone" value="${esc(l.phone)}" maxlength="10" inputmode="numeric" oninput="digitsInput('ld_phone',10)"></div>
+      <div class="field"><label>Source</label><input id="ld_source" value="${esc(l.source)}" placeholder="Reference / Website / Tender"></div>
+      <div class="field full"><label>Requirement</label><input id="ld_req" value="${esc(l.requirement)}"></div>
       <div class="field"><label>Est. Value (₹)</label><input id="ld_value" type="number" value="${l.value||''}"></div>
       <div class="field"><label>Status</label><select id="ld_status">${LEAD_STATUS.map(s=>`<option ${s===l.status?'selected':''}>${s}</option>`).join('')}</select></div>
       <div class="field"><label>Next Follow-up</label><input id="ld_follow" type="date" value="${l.nextFollowup||''}"></div>
-      <div class="field full"><label>Notes</label><textarea id="ld_notes" rows="2">${l.notes||''}</textarea></div>
+      <div class="field full"><label>Notes</label><textarea id="ld_notes" rows="2">${esc(l.notes)}</textarea></div>
    </div>`,
    `<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" onclick="saveLead('${id||''}')">Save</button>`);
 }
 function saveLead(id){
   const o={name:val('ld_name'),contact:val('ld_contact'),phone:val('ld_phone'),source:val('ld_source'),requirement:val('ld_req'),value:+val('ld_value')||0,status:val('ld_status'),nextFollowup:val('ld_follow'),notes:val('ld_notes')};
   if(!o.name)return toast('Lead name required','err');
+  if(!phoneOk(o.phone))return toast('Phone must be up to 10 digits','err');
   DB.leads=DB.leads||[];
   if(id){Object.assign(DB.leads.find(x=>x.id===id),o);}else{DB.leads.push({id:uid('l'),...o});}
   save();closeModal();toast('Lead saved','ok');renderLeads();
@@ -1152,7 +1334,7 @@ function saveLead(id){
 function delLead(id){ if(confirm('Delete lead?')){ DB.leads=DB.leads.filter(l=>l.id!==id); save(); renderLeads(); } }
 
 /* ---- Users & Permissions ---- */
-const PERM_LABELS={dashboard:'Dashboard',newinvoice:'New Bill',invoices:'Invoices',payments:'Outstanding',inventory:'Product Inventory',vendors:'Vendors & Purchases',staff:'Staff Attendance',payroll:'Salary / Payroll',leads:'Leads',concalc:'Concrete Calc',revenue:'Revenue Calc',customers:'Customers',sites:'Sites',vehicles:'Vehicles',grades:'Grades',rates:'Rates',reports:'Reports',activity:'Activity Log',users:'Users',settings:'Settings'};
+const PERM_LABELS={dashboard:'Dashboard',newinvoice:'New Bill',invoices:'Invoices',payments:'Outstanding',inventory:'Product Inventory',materials:'Materials Received',vendors:'Vendors & Purchases',vehiclelog:'Vehicle Log',staff:'Staff Attendance',payroll:'Salary / Payroll',leads:'Leads',concalc:'Concrete Calc',revenue:'Revenue Calc',customers:'Customers',sites:'Sites',vehicles:'Vehicles',grades:'Grades',rates:'Rates',reports:'Reports',activity:'Activity Log',users:'Users',settings:'Settings'};
 function renderUsers(){
   const users=DB.users||[];
   document.getElementById('main').innerHTML=topbar('Users & Permissions','Create staff logins and control what each person can access',
@@ -1160,8 +1342,8 @@ function renderUsers(){
    `<div class="card"><div class="bd" style="padding:0">
     <table class="table"><thead><tr><th>Name</th><th>Login</th><th>Email</th><th>Role</th><th>Access</th><th>Status</th><th class="right"></th></tr></thead><tbody>
     ${users.map(u=>{const n=Object.values(u.perms||{}).filter(Boolean).length;
-      return `<tr><td><b>${u.name}</b></td><td>${u.username||'-'}</td>
-      <td>${u.email?(u.email+' <span class="pill nogst">Cloud</span>'):'<span class="muted">—</span>'}</td><td>${u.role}</td>
+      return `<tr><td><b>${esc(u.name)}</b></td><td>${esc(u.username)||'-'}</td>
+      <td>${u.email?(esc(u.email)+' <span class="pill nogst">Cloud</span>'):'<span class="muted">—</span>'}</td><td>${esc(u.role)}</td>
       <td>${n} of ${Object.keys(PERM_LABELS).length} modules</td>
       <td>${u.active?'<span class="pill paid">Active</span>':'<span class="pill due">Disabled</span>'}</td>
       <td class="right"><button class="btn ghost sm" onclick="userModal('${u.id}')">✎ Edit</button>${u.username==='admin'?'':`<button class="btn danger sm" onclick="delUser('${u.id}')">✕</button>`}</td></tr>`;}).join('')}
@@ -1171,13 +1353,13 @@ function userModal(id){
   const u=id?DB.users.find(x=>x.id===id):{name:'',username:'',role:'Accountant',active:true,perms:{...ROLE_PERMS.Accountant},secQ:'In which town is the plant located?'};
   modal((id?'Edit':'Add')+' User',
    `<div class="form-grid">
-      <div class="field"><label>Full Name *</label><input id="us_name" value="${u.name||''}"></div>
-      <div class="field"><label>Login Username *</label><input id="us_user" value="${u.username||''}"></div>
-      <div class="field full"><label>Email (enables email login &amp; reset-link)</label><input id="us_email" type="email" value="${u.email||''}" placeholder="staff@email.com — optional"></div>
+      <div class="field"><label>Full Name *</label><input id="us_name" value="${esc(u.name)}"></div>
+      <div class="field"><label>Login Username *</label><input id="us_user" value="${esc(u.username)}"></div>
+      <div class="field full"><label>Email (enables email login &amp; reset-link)</label><input id="us_email" type="email" value="${esc(u.email)}" placeholder="staff@email.com — optional"></div>
       <div class="field"><label>Role (preset)</label><select id="us_role" onchange="usRole()">${['Admin','Accountant','Auditor'].map(r=>`<option ${r===u.role?'selected':''}>${r}</option>`).join('')}</select></div>
       <div class="field"><label>Status</label><select id="us_active"><option value="1" ${u.active!==false?'selected':''}>Active</option><option value="0" ${u.active===false?'selected':''}>Disabled</option></select></div>
       <div class="field"><label>${id?'Reset Password (blank = keep)':'Password *'}</label><input id="us_pwd" type="password" placeholder="${id?'blank = keep current':'set a login password'}"></div>
-      <div class="field"><label>Security Question</label><input id="us_secq" value="${u.secQ||''}" placeholder="e.g. Your first vehicle number?"></div>
+      <div class="field"><label>Security Question</label><input id="us_secq" value="${esc(u.secQ)}" placeholder="e.g. Your first vehicle number?"></div>
       <div class="field full"><label>Security Answer ${id?'(blank = keep)':'*'}</label><input id="us_seca" placeholder="${id?'blank = keep current':'used for password recovery'}"></div>
     </div>
     <div class="muted" style="font-size:11px;margin-top:8px">Add an email <b>and</b> a password to create a cloud account — that user can then sign in with their email and use the "Forgot password" reset-link.</div>
@@ -1246,7 +1428,7 @@ function drawInvTbl(){
   document.getElementById('invTbl').innerHTML = prods.length?
     `<table class="table"><thead><tr><th>Product</th><th>Category</th><th class="num">Current Stock</th><th class="num">Reorder</th><th class="num">Rate</th><th class="num">Value</th><th class="right">Actions</th></tr></thead><tbody>`+
     prods.map(p=>`<tr>
-      <td><b>${p.name}</b></td><td>${p.category||'-'}</td>
+      <td><b>${esc(p.name)}</b></td><td>${esc(p.category)||'-'}</td>
       <td class="num"><b class="${lowStock(p)?'stock-low':''}">${p.stock} ${p.unit}</b> ${lowStock(p)?'<span class="pill low">LOW</span>':''}</td>
       <td class="num">${p.reorder||0}</td><td class="num">₹${inr(p.rate||0)}</td><td class="num">₹${inr(p.stock*(p.rate||0))}</td>
       <td class="right">
@@ -1274,7 +1456,7 @@ function prodModal(id){
   const selCat = isCustom ? 'Other' : (p.category||'Cement');
   modal((id?'Edit':'Add')+' Product',
     `<div class="form-grid">
-      <div class="field full"><label>Product Name *</label><input id="pr_name" value="${p.name||''}" placeholder="e.g. Cement (OPC 53 Grade)"></div>
+      <div class="field full"><label>Product Name *</label><input id="pr_name" value="${esc(p.name)}" placeholder="e.g. Cement (OPC 53 Grade)"></div>
       <div class="field"><label>Category</label><select id="pr_cat" onchange="prCatToggle()">${cats.map(c=>`<option ${c===selCat?'selected':''}>${c}</option>`).join('')}</select></div>
       <div class="field"><label>Unit</label><select id="pr_unit">${units.map(u=>`<option ${u===p.unit?'selected':''}>${u}</option>`).join('')}</select></div>
       <div class="field full" id="pr_catother_wrap" style="display:${selCat==='Other'?'block':'none'}"><label>Specify Category *</label><input id="pr_catother" value="${isCustom?p.category:''}" placeholder="e.g. Diesel, GGBS, Water"></div>
@@ -1340,7 +1522,7 @@ function renderStaff(){
       canEdit()?`<button class="btn gold" onclick="staffModal()">➕ Add Staff</button>`:'')+
     `<div class="toolbar">
       <label style="font-size:12px;color:var(--muted)">Date</label>
-      <input type="date" id="staffDate" value="${staffDate}" onchange="staffDate=this.value;renderStaff()" style="max-width:170px">
+      <input type="date" id="staffDate" value="${staffDate}" max="${todayISO()}" onchange="staffDate=this.value>todayISO()?todayISO():this.value;renderStaff()" style="max-width:170px">
       <button class="btn ghost" onclick="markAllPresent()">✔ Mark all Present</button>
       <button class="btn ghost" onclick="exportAttendanceCSV()">⬇ Attendance CSV</button>
     </div>
@@ -1359,22 +1541,31 @@ function drawStaff(){
      <div class="kpi red"><div class="lab">Absent</div><div class="val">${cnt.A}</div></div>
      <div class="kpi accent"><div class="lab">Half-day</div><div class="val">${cnt.H}</div></div>
      <div class="kpi blue"><div class="lab">Leave</div><div class="val">${cnt.L}</div></div>`;
+  const future=staffDate>todayISO();
   document.getElementById('staffTbl').innerHTML = staff.length?
+    (future?`<div class="muted" style="padding:8px 12px;color:var(--red)">Attendance can only be marked up to today.</div>`:'')+
     `<table class="table"><thead><tr><th>Staff</th><th>Role</th><th class="num">Wage/day</th><th>Attendance</th><th class="right"></th></tr></thead><tbody>`+
     staff.map(s=>{const a=attFor(s.id,staffDate);const cur=a?a.status:'';
-      return `<tr><td><b>${s.name}</b><br><span class="muted" style="font-size:11px">${s.phone||''}</span></td>
-      <td>${s.role||'-'}</td><td class="num">₹${inr(s.wage||0)}</td>
-      <td><span class="att-btns">${ATT.map(([k,lab])=>`<button class="att-btn ${k} ${cur===k?'on':''}" title="${lab}" onclick="markAtt('${s.id}','${k}')">${k}</button>`).join('')}</span></td>
+      const notJoined=s.joinDate&&staffDate<s.joinDate;const locked=future||notJoined;
+      const cell=notJoined
+        ? `<span class="muted" style="font-size:11px">Not joined (from ${fmtDate(s.joinDate)})</span>`
+        : `<span class="att-btns">${ATT.map(([k,lab])=>`<button class="att-btn ${k} ${cur===k?'on':''}" title="${lab}" ${locked?'disabled':''} onclick="markAtt('${s.id}','${k}')">${k}</button>`).join('')}</span>`;
+      return `<tr><td><b>${esc(s.name)}</b><br><span class="muted" style="font-size:11px">${esc(s.phone)}</span></td>
+      <td>${esc(s.role)||'-'}</td><td class="num">₹${inr(s.wage||0)}</td>
+      <td>${cell}</td>
       <td class="right"><button class="btn ghost sm" onclick="staffModal('${s.id}')">✎</button><button class="btn danger sm" onclick="delStaff('${s.id}')">✕</button></td></tr>`;}).join('')+`</tbody></table>`
     : `<div class="empty">No staff added yet.</div>`;
   document.getElementById('staffMonth').innerHTML = staff.length?
     `<table class="table"><thead><tr><th>Staff</th><th class="num">Present</th><th class="num">Absent</th><th class="num">Half-day</th><th class="num">Leave</th><th class="num">Payable Days</th></tr></thead><tbody>`+
     staff.map(s=>{const P=attCount(s.id,ym,'P'),A=attCount(s.id,ym,'A'),H=attCount(s.id,ym,'H'),L=attCount(s.id,ym,'L');
-      return `<tr><td><b>${s.name}</b></td><td class="num">${P}</td><td class="num">${A}</td><td class="num">${H}</td><td class="num">${L}</td><td class="num"><b>${(P+H*0.5).toFixed(1)}</b></td></tr>`;}).join('')+`</tbody></table>`
+      return `<tr><td><b>${esc(s.name)}</b></td><td class="num">${P}</td><td class="num">${A}</td><td class="num">${H}</td><td class="num">${L}</td><td class="num"><b>${(P+H*0.5).toFixed(1)}</b></td></tr>`;}).join('')+`</tbody></table>`
     : '';
 }
 function markAtt(staffId,status){
   if(!guardEdit())return;
+  if(staffDate>todayISO()) return toast('Cannot mark attendance for a future date','err');
+  const s=staffById(staffId);
+  if(s.joinDate && staffDate<s.joinDate) return toast((s.name||'Staff')+' had not joined on '+fmtDate(staffDate)+' (joined '+fmtDate(s.joinDate)+')','err');
   const a=attFor(staffId,staffDate);
   if(a){ a.status = a.status===status ? '' : status; if(!a.status){ DB.attendance=DB.attendance.filter(x=>x!==a); } }
   else { DB.attendance.push({id:uid('at'),staffId,date:staffDate,status}); }
@@ -1382,16 +1573,19 @@ function markAtt(staffId,status){
 }
 function markAllPresent(){
   if(!guardEdit())return;
-  (DB.staff||[]).filter(s=>s.active!==false).forEach(s=>{ if(!attFor(s.id,staffDate)) DB.attendance.push({id:uid('at'),staffId:s.id,date:staffDate,status:'P'}); else attFor(s.id,staffDate).status='P'; });
-  save(); toast('All marked present','ok'); drawStaff();
+  if(staffDate>todayISO()) return toast('Cannot mark attendance for a future date','err');
+  (DB.staff||[]).filter(s=>s.active!==false).forEach(s=>{
+    if(s.joinDate && staffDate<s.joinDate) return;   // skip staff not yet joined
+    if(!attFor(s.id,staffDate)) DB.attendance.push({id:uid('at'),staffId:s.id,date:staffDate,status:'P'}); else attFor(s.id,staffDate).status='P'; });
+  save(); toast('All present marked (joined staff only)','ok'); drawStaff();
 }
 function staffModal(id){
   const s=id?staffById(id):{name:'',role:'',phone:'',wage:'',monthlySalary:'',joinDate:'',leaveAllowed:2,active:true};
   modal((id?'Edit':'Add')+' Staff',
     `<div class="form-grid">
-      <div class="field"><label>Name *</label><input id="sf_name" value="${s.name||''}"></div>
-      <div class="field"><label>Designation</label><input id="sf_role" value="${s.role||''}" placeholder="Driver / Operator / Loader"></div>
-      <div class="field"><label>Phone</label><input id="sf_phone" value="${s.phone||''}"></div>
+      <div class="field"><label>Name *</label><input id="sf_name" value="${s.name||''}" oninput="lettersInput('sf_name')"></div>
+      <div class="field"><label>Designation</label><input id="sf_role" value="${esc(s.role)}" placeholder="Driver / Operator / Loader"></div>
+      <div class="field"><label>Phone</label><input id="sf_phone" value="${s.phone||''}" maxlength="10" inputmode="numeric" oninput="digitsInput('sf_phone',10)"></div>
       <div class="field"><label>Joining Date</label><input id="sf_join" type="date" value="${s.joinDate||''}"></div>
       <div class="field"><label>Monthly Salary (₹)</label><input id="sf_msal" type="number" value="${s.monthlySalary!==''&&s.monthlySalary!=null?s.monthlySalary:''}"></div>
       <div class="field"><label>Wage per day (₹)</label><input id="sf_wage" type="number" value="${s.wage!==''&&s.wage!=null?s.wage:''}"></div>
@@ -1405,6 +1599,7 @@ function saveStaff(id){
   const o={name:val('sf_name'),role:val('sf_role'),phone:val('sf_phone'),wage:Number(val('sf_wage'))||0,
     monthlySalary:Number(val('sf_msal'))||0,joinDate:val('sf_join'),leaveAllowed:Number(val('sf_leave'))||0,active:val('sf_active')==='1'};
   if(!o.name)return toast('Name required','err');
+  if(!phoneOk(o.phone))return toast('Phone must be up to 10 digits','err');
   if(id){ Object.assign(staffById(id),o); } else { DB.staff.push({id:uid('st'),...o}); }
   save(); closeModal(); toast('Staff saved','ok'); renderStaff();
 }
@@ -1412,8 +1607,11 @@ function delStaff(id){ if(!guardEdit())return; if(confirm('Delete this staff mem
 function exportAttendanceCSV(){
   const ym=staffDate.slice(0,7);
   const rows=[['Staff','Role','Month','Present','Absent','Half-day','Leave','Payable Days']];
-  (DB.staff||[]).forEach(s=>{const P=attCount(s.id,ym,'P'),A=attCount(s.id,ym,'A'),H=attCount(s.id,ym,'H'),L=attCount(s.id,ym,'L');
-    rows.push([s.name,s.role,monthName(ym),P,A,H,L,(P+H*0.5).toFixed(1)]);});
+  let tP=0,tA=0,tH=0,tL=0,tPay=0;
+  (DB.staff||[]).forEach(s=>{const P=attCount(s.id,ym,'P'),A=attCount(s.id,ym,'A'),H=attCount(s.id,ym,'H'),L=attCount(s.id,ym,'L');const pay=P+H*0.5;
+    tP+=P;tA+=A;tH+=H;tL+=L;tPay+=pay;
+    rows.push([s.name,s.role,monthName(ym),P,A,H,L,pay.toFixed(1)]);});
+  rows.push(['TOTAL','','',tP,tA,tH,tL,tPay.toFixed(1)]);
   downloadCSV('DNK_Attendance_'+ym+'.csv',rows);
 }
 
@@ -1460,11 +1658,11 @@ function drawPayroll(){
   document.getElementById('payTbl').innerHTML = staff.length?
     `<table class="table"><thead><tr><th>Staff</th><th class="num">Gross</th><th class="num" title="Present">P</th><th class="num" title="Absent">A</th><th class="num" title="Half-day">H</th><th class="num" title="Leave">L</th><th class="num">LOP Days</th><th class="num">LOP ₹</th><th class="num">Advances</th><th class="num">Net Payable</th><th class="right">Actions</th></tr></thead><tbody>`+
     staff.map(s=>{const c=computePay(s,ym);const done=salaryRecord(s.id,ym);
-      return `<tr><td><b>${s.name}</b><br><span class="muted" style="font-size:11px">${s.role||''}</span></td>
+      return `<tr><td><b>${esc(s.name)}</b><br><span class="muted" style="font-size:11px">${esc(s.role)}</span></td>
         <td class="num">₹${inr(c.gross)}</td>
         <td class="num">${c.P}</td><td class="num">${c.A}</td><td class="num">${c.H}</td><td class="num">${c.L}</td>
         <td class="num">${c.lopDays.toFixed(1)}</td><td class="num">₹${inr(c.lop)}</td>
-        <td class="num">₹${inr(c.adv)}</td><td class="num"><b>₹${inr(c.net)}</b> ${done?'<span class="pill paid">Processed</span>':''}</td>
+        <td class="num">₹${inr(c.adv)}</td><td class="num"><b style="${c.net<0?'color:var(--red)':''}">₹${inr(c.net)}</b> ${done?'<span class="pill paid">Processed</span>':''}${c.net<0?'<br><span class="muted" style="font-size:10px">advance exceeds salary — carry forward</span>':''}</td>
         <td class="right">
           ${canEdit()?`<button class="btn ghost sm" onclick="advanceModal('${s.id}')">➕ Advance</button>`:''}
           <button class="btn ghost sm" onclick="printPayslip('${s.id}')">🧾 Payslip</button>
@@ -1522,16 +1720,16 @@ function processSalary(id){
 }
 function printPayslip(id){
   const s=staffById(id); const ym=payMonth; const c=computePay(s,ym); const co=DB.company;
-  const html=`<!doctype html><html><head><meta charset="utf-8"><title>Payslip — ${s.name} ${ym}</title>
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>Payslip — ${esc(s.name)} ${ym}</title>
     <style>body{font-family:"Segoe UI",Arial,sans-serif;color:#111;font-size:12px;padding:18px}
     h2{margin:0}.muted{color:#666}table{border-collapse:collapse;width:100%;margin-top:10px}
     td,th{border:1px solid #999;padding:5px 8px}.r{text-align:right}th{background:#f0f0f0;text-align:left}
     .head{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #14508c;padding-bottom:8px}
     .net{background:#099330;color:#fff;font-weight:700}</style></head><body>
-    <div class="head"><div><h2>${co.name}</h2><div class="muted">${co.addressLines.join(', ')}</div></div>
+    <div class="head"><div><h2>${esc(co.name)}</h2><div class="muted">${esc(co.addressLines.join(', '))}</div></div>
       <img src="${window.LOGO_DATA}" style="width:66px;height:66px;object-fit:contain"></div>
     <h3 style="margin:12px 0 0">Salary Slip — ${monthName(ym)}</h3>
-    <div class="muted">Employee: <b>${s.name}</b> • ${s.role||''} ${s.joinDate?('• Joined '+fmtDate(s.joinDate)):''}</div>
+    <div class="muted">Employee: <b>${esc(s.name)}</b> • ${esc(s.role)} ${s.joinDate?('• Joined '+fmtDate(s.joinDate)):''}</div>
     <table><tbody>
       <tr><th>Gross Salary (monthly)</th><td class="r">₹ ${inr(c.gross)}</td></tr>
       <tr><td>Attendance — P:${c.P} A:${c.A} H:${c.H} L:${c.L} &nbsp; (Paid leave allowed: ${c.allowed})</td><td class="r muted">—</td></tr>
@@ -1548,8 +1746,11 @@ function printPayslip(id){
 function exportPayrollCSV(){
   const ym=payMonth;
   const rows=[['Staff','Designation','Month','Gross','Present','Absent','Half-day','Leave','LOP Days','LOP Amount','Advances','Net Payable','Status']];
+  let tG=0,tLop=0,tAdv=0,tNet=0;
   (DB.staff||[]).filter(s=>s.active!==false).forEach(s=>{const c=computePay(s,ym);
+    tG+=c.gross;tLop+=c.lop;tAdv+=c.adv;tNet+=c.net;
     rows.push([s.name,s.role,monthName(ym),c.gross,c.P,c.A,c.H,c.L,c.lopDays,c.lop,c.adv,c.net,salaryRecord(s.id,ym)?'Processed':'Draft']);});
+  rows.push(['TOTAL','','',round2(tG),'','','','','',round2(tLop),round2(tAdv),round2(tNet),'']);
   downloadCSV('DNK_Payroll_'+ym+'.csv',rows);
 }
 
@@ -1574,7 +1775,7 @@ function renderVendors(){
     <div class="card" style="margin-bottom:16px"><div class="hd"><h3>Vendors</h3></div><div class="bd" style="padding:0">
       ${vends.length?`<table class="table"><thead><tr><th>Vendor</th><th>Material</th><th>GSTIN</th><th>Phone</th><th class="num">Purchases</th><th class="num">Value</th><th class="right"></th></tr></thead><tbody>`+
       vends.map(v=>{const ps=purchasesFor(v.id);const val=ps.reduce((s,p)=>s+(+p.amount||0),0);
-        return `<tr><td><b>${v.name}</b></td><td>${v.material||'-'}</td><td>${v.gstin||'—'}</td><td>${v.phone||'-'}</td>
+        return `<tr><td><b>${esc(v.name)}</b></td><td>${esc(v.material)||'-'}</td><td>${v.gstin?esc(v.gstin):'—'}</td><td>${esc(v.phone)||'-'}</td>
         <td class="num">${ps.length}</td><td class="num">₹${inr(val)}</td>
         <td class="right">${canEdit()?`<button class="btn ghost sm" onclick="vendorModal('${v.id}')">✎</button><button class="btn danger sm" onclick="delVendor('${v.id}')">✕</button>`:''}</td></tr>`;}).join('')+`</tbody></table>`
       :'<div class="empty">No vendors yet.</div>'}
@@ -1587,10 +1788,10 @@ function drawPurchases(){
   document.getElementById('purchTbl').innerHTML = purch.length?
     `<table class="table"><thead><tr><th>Date / Time</th><th>Vendor</th><th>Material</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th><th class="num">Paid</th><th class="num">Due</th><th>Bill No</th><th class="right">Actions</th></tr></thead><tbody>`+
     purch.map(p=>{const v=vendor(p.vendorId);const pr=product(p.productId);const due=round2((+p.amount||0)-(+p.paid||0));
-      return `<tr><td>${fmtDate(p.date)}<br><span class="muted" style="font-size:10px">${p.at||''}</span></td>
-        <td>${v.name||'-'}</td><td>${pr.name||p.material||'-'}</td>
+      return `<tr><td>${fmtDate(p.date)}<br><span class="muted" style="font-size:10px">${esc(p.at)}</span></td>
+        <td>${esc(v.name)||'-'}</td><td>${esc(pr.name||p.material)||'-'}</td>
         <td class="num">${p.qty}</td><td class="num">₹${inr(p.rate)}</td><td class="num"><b>₹${inr(p.amount)}</b></td>
-        <td class="num">₹${inr(p.paid||0)}</td><td class="num">${due>0.5?'₹'+inr(due):'—'}</td><td>${p.billNo||'-'}</td>
+        <td class="num">₹${inr(p.paid||0)}</td><td class="num">${due>0.5?'₹'+inr(due):'—'}</td><td>${esc(p.billNo)||'-'}</td>
         <td class="right">${canEdit()&&due>0.5?`<button class="btn green sm" onclick="payPurchaseModal('${p.id}')">💰 Pay</button>`:''}${canEdit()?`<button class="btn danger sm" onclick="delPurchase('${p.id}')">✕</button>`:''}</td></tr>`;}).join('')+`</tbody></table>`
     : `<div class="empty">No purchases recorded yet.</div>`;
 }
@@ -1598,18 +1799,20 @@ function vendorModal(id){
   const v=id?vendor(id):{name:'',gstin:'',phone:'',material:'',address:''};
   modal((id?'Edit':'Add')+' Vendor',
     `<div class="form-grid">
-      <div class="field full"><label>Vendor Name *</label><input id="vn_name" value="${v.name||''}"></div>
-      <div class="field"><label>Material Supplied</label><input id="vn_mat" value="${v.material||''}" placeholder="Cement / Aggregate / Sand"></div>
-      <div class="field"><label>GSTIN</label><input id="vn_gstin" value="${v.gstin||''}"></div>
-      <div class="field"><label>Phone</label><input id="vn_phone" value="${v.phone||''}"></div>
-      <div class="field full"><label>Address</label><textarea id="vn_addr" rows="2">${v.address||''}</textarea></div>
+      <div class="field full"><label>Vendor Name *</label><input id="vn_name" value="${esc(v.name)}"></div>
+      <div class="field"><label>Material Supplied</label><input id="vn_mat" value="${esc(v.material)}" placeholder="Cement / Aggregate / Sand"></div>
+      <div class="field"><label>GSTIN</label><input id="vn_gstin" value="${v.gstin||''}" maxlength="15" oninput="upperInput('vn_gstin')"></div>
+      <div class="field"><label>Phone</label><input id="vn_phone" value="${v.phone||''}" maxlength="10" inputmode="numeric" oninput="digitsInput('vn_phone',10)"></div>
+      <div class="field full"><label>Address</label><textarea id="vn_addr" rows="2">${esc(v.address)}</textarea></div>
     </div>`,
     `<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" onclick="saveVendor('${id||''}')">Save</button>`);
 }
 function saveVendor(id){
   if(!guardEdit())return;
-  const o={name:val('vn_name'),material:val('vn_mat'),gstin:val('vn_gstin'),phone:val('vn_phone'),address:val('vn_addr')};
+  const o={name:val('vn_name'),material:val('vn_mat'),gstin:val('vn_gstin').toUpperCase(),phone:val('vn_phone'),address:val('vn_addr')};
   if(!o.name)return toast('Vendor name required','err');
+  if(o.gstin && !gstinValid(o.gstin))return toast('Invalid GSTIN — format: 22AAAAA0000A1Z5','err');
+  if(!phoneOk(o.phone))return toast('Phone must be up to 10 digits','err');
   DB.vendors=DB.vendors||[];
   if(id){Object.assign(vendor(id),o);}else{DB.vendors.push({id:uid('vn'),...o});}
   logAct(id?'Vendor updated':'Vendor added',o.name);
@@ -1622,7 +1825,7 @@ function delVendor(id){
 }
 function purchaseModal(id){
   const p=id?(DB.purchases||[]).find(x=>x.id===id):{vendorId:'',productId:'',qty:'',rate:'',date:todayISO(),billNo:'',paid:''};
-  const vopts=(DB.vendors||[]).map(v=>`<option value="${v.id}" ${v.id===p.vendorId?'selected':''}>${v.name}</option>`).join('');
+  const vopts=(DB.vendors||[]).map(v=>`<option value="${v.id}" ${v.id===p.vendorId?'selected':''}>${esc(v.name)}</option>`).join('');
   const popts=(DB.products||[]).map(pr=>`<option value="${pr.id}" ${pr.id===p.productId?'selected':''}>${pr.name} (${pr.unit})</option>`).join('');
   modal((id?'Edit':'Record')+' Purchase',
     `<div class="form-grid">
@@ -1632,7 +1835,7 @@ function purchaseModal(id){
       <div class="field"><label>Rate (₹) *</label><input id="pu_rate" type="number" step="0.01" oninput="puCalc()" value="${p.rate!==''&&p.rate!=null?p.rate:''}"></div>
       <div class="field"><label>Amount (₹)</label><input id="pu_amount" type="number" step="0.01" value="${p.amount!=null?p.amount:''}" readonly></div>
       <div class="field"><label>Amount Paid (₹)</label><input id="pu_paid" type="number" step="0.01" value="${p.paid!==''&&p.paid!=null?p.paid:''}"></div>
-      <div class="field"><label>Bill / Invoice No</label><input id="pu_bill" value="${p.billNo||''}"></div>
+      <div class="field"><label>Bill / Invoice No</label><input id="pu_bill" value="${esc(p.billNo)}"></div>
       <div class="field"><label>Date</label><input id="pu_date" type="date" value="${p.date||todayISO()}"></div>
     </div>`,
     `<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn green" onclick="savePurchase('${id||''}')">Save Purchase</button>`);
@@ -1690,6 +1893,211 @@ function exportPurchasesCSV(){
   downloadCSV('DNK_Purchases_'+todayISO()+'.csv',rows);
 }
 
+/* ================= MATERIALS RECEIVED (raw-material inflow register) ================= */
+const MATERIAL_TYPES=['12MM','20MM','10MM','DUST','M SAND','FLYASH','CEMENT','CEMENT LOOSE','ADMIXTURE','PLASTICISER','OTHER'];
+let matMonth=todayISO().slice(0,7), matVendor='';
+function renderMaterials(){
+  matMonth=matMonth||todayISO().slice(0,7);
+  const inMonth=(DB.materials||[]).filter(m=>(m.date||'').slice(0,7)===matMonth && (!matVendor||m.vendorId===matVendor));
+  const totQty=inMonth.reduce((s,m)=>s+(+m.qty||0),0);
+  const totAmt=inMonth.reduce((s,m)=>s+(+m.amount||0),0);
+  const totPaid=inMonth.reduce((s,m)=>s+(+m.paid||0),0);
+  const actions=canEdit()?`<button class="btn gold" onclick="materialModal()">➕ Record Material</button>`:'';
+  document.getElementById('main').innerHTML=
+    topbar('Materials Received','Raw materials received from vendors — register &amp; daily per-vendor summary',actions)+
+    `<div class="toolbar">
+      <label style="font-size:12px;color:var(--muted)">Month</label>
+      <input type="month" id="matMonth" value="${matMonth}" onchange="matMonth=this.value;renderMaterials()" style="max-width:170px">
+      <select id="matVendor" onchange="matVendor=this.value;renderMaterials()" style="max-width:220px">
+        <option value="">All vendors</option>
+        ${(DB.vendors||[]).map(v=>`<option value="${v.id}" ${matVendor===v.id?'selected':''}>${esc(v.name)}</option>`).join('')}
+      </select>
+      <button class="btn ghost" onclick="exportMaterialsCSV()">⬇ Materials Register (CSV)</button>
+      <button class="btn ghost" onclick="printMaterialSummary()">🖨 Daily Vendor Summary</button>
+    </div>
+    <div class="grid kpis" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px">
+      <div class="kpi blue"><div class="lab">Entries</div><div class="val">${inMonth.length}</div></div>
+      <div class="kpi accent"><div class="lab">Total Qty</div><div class="val">${totQty.toFixed(2)}</div></div>
+      <div class="kpi green"><div class="lab">Total Value</div><div class="val">₹${inr(totAmt)}</div></div>
+      <div class="kpi red"><div class="lab">Balance Due</div><div class="val">₹${inr(round2(totAmt-totPaid))}</div></div>
+    </div>
+    <div class="card"><div class="hd"><h3>Register — ${monthName(matMonth)}</h3></div><div class="bd" style="padding:0" id="matTbl"></div></div>`;
+  drawMaterials();
+}
+function drawMaterials(){
+  const rows=(DB.materials||[]).filter(m=>(m.date||'').slice(0,7)===matMonth && (!matVendor||m.vendorId===matVendor))
+    .sort((a,b)=>(b.date+(b.at||'')).localeCompare(a.date+(a.at||'')));
+  document.getElementById('matTbl').innerHTML = rows.length?
+    `<table class="table"><thead><tr><th>Date</th><th>Material</th><th class="num">Qty</th><th>Supplier</th><th>Vehicle No</th><th class="num">Rate</th><th class="num">Amount</th><th class="num">Paid</th><th class="num">Balance</th><th>Remarks</th><th class="right"></th></tr></thead><tbody>`+
+    rows.map(m=>{const bal=round2((+m.amount||0)-(+m.paid||0));
+      return `<tr><td>${fmtDate(m.date)}</td><td><b>${esc(m.material)}</b></td><td class="num">${(+m.qty||0).toFixed(2)}</td>
+      <td>${esc(vendor(m.vendorId).name||m.supplier)||'-'}</td><td>${esc(m.vehicleNo)||'-'}</td>
+      <td class="num">₹${inr(m.rate)}</td><td class="num"><b>₹${inr(m.amount)}</b></td><td class="num">₹${inr(m.paid||0)}</td>
+      <td class="num">${bal>0.5?'₹'+inr(bal):'—'}</td><td>${esc(m.remarks)}</td>
+      <td class="right">${canEdit()?`<button class="btn ghost sm" onclick="materialModal('${m.id}')">✎</button><button class="btn danger sm" onclick="delMaterial('${m.id}')">✕</button>`:''}</td></tr>`;}).join('')+`</tbody></table>`
+    : `<div class="empty">No materials recorded for ${monthName(matMonth)}.</div>`;
+}
+function materialModal(id){
+  const m=id?(DB.materials||[]).find(x=>x.id===id):{date:todayISO(),material:'',qty:'',vendorId:'',vehicleNo:'',rate:'',paid:'',remarks:''};
+  const vopts=(DB.vendors||[]).map(v=>`<option value="${v.id}" ${v.id===m.vendorId?'selected':''}>${esc(v.name)}</option>`).join('');
+  const mopts=MATERIAL_TYPES.map(t=>`<option value="${t}"></option>`).join('');
+  modal((id?'Edit':'Record')+' Material Received',
+    `<div class="form-grid">
+      <div class="field"><label>Date</label><input id="ma_date" type="date" value="${m.date||todayISO()}" max="${todayISO()}"></div>
+      <div class="field"><label>Material *</label><input id="ma_mat" list="ma_mats" value="${esc(m.material)}" placeholder="12MM / 20MM / DUST / CEMENT…" oninput="upperInput('ma_mat')"><datalist id="ma_mats">${mopts}</datalist></div>
+      <div class="field"><label>Vendor / Supplier *</label><select id="ma_vendor"><option value="">— Select Vendor —</option>${vopts}</select></div>
+      <div class="field"><label>Vehicle No</label><input id="ma_veh" value="${m.vehicleNo||''}" oninput="plateInput('ma_veh')"></div>
+      <div class="field"><label>Quantity *</label><input id="ma_qty" type="number" step="0.01" value="${m.qty!==''&&m.qty!=null?m.qty:''}" oninput="maCalc()"></div>
+      <div class="field"><label>Rate (₹)</label><input id="ma_rate" type="number" step="0.01" value="${m.rate!==''&&m.rate!=null?m.rate:''}" oninput="maCalc()"></div>
+      <div class="field"><label>Amount (₹)</label><input id="ma_amt" type="number" step="0.01" value="${m.amount!=null?m.amount:''}" readonly></div>
+      <div class="field"><label>Amount Paid (₹)</label><input id="ma_paid" type="number" step="0.01" value="${m.paid!==''&&m.paid!=null?m.paid:''}"></div>
+      <div class="field full"><label>Remarks</label><input id="ma_rem" value="${esc(m.remarks)}"></div>
+    </div>`,
+    `<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn green" onclick="saveMaterial('${id||''}')">Save</button>`);
+  maCalc();
+}
+function maCalc(){ const q=Number(val('ma_qty'))||0,r=Number(val('ma_rate'))||0; const a=document.getElementById('ma_amt'); if(a)a.value=round2(q*r); }
+function saveMaterial(id){
+  if(!guardEdit())return;
+  const vendorId=val('ma_vendor'), material=val('ma_mat').toUpperCase();
+  const qty=Number(val('ma_qty'))||0, rate=Number(val('ma_rate'))||0, amount=round2(qty*rate), paid=Number(val('ma_paid'))||0;
+  if(!material)return toast('Enter the material','err');
+  if(!vendorId)return toast('Select a vendor','err');
+  if(qty<=0)return toast('Enter a valid quantity','err');
+  const o={date:val('ma_date')||todayISO(),material,qty,vendorId,vehicleNo:val('ma_veh').toUpperCase(),rate,amount,paid,remarks:val('ma_rem')};
+  DB.materials=DB.materials||[];
+  if(id){ Object.assign((DB.materials).find(x=>x.id===id),o); }
+  else { o.id=uid('mt'); o.at=nowStamp(); DB.materials.push(o); }
+  logAct(id?'Material updated':'Material received',material+' '+qty+' — '+(vendor(vendorId).name||''));
+  save(); closeModal(); toast('Material saved','ok'); renderMaterials();
+}
+function delMaterial(id){ if(!guardEdit())return; if(confirm('Delete this material entry?')){ DB.materials=DB.materials.filter(m=>m.id!==id); save(); renderMaterials(); } }
+function exportMaterialsCSV(){
+  const rows=[['DATE','MATERIAL','QTY','SUPPLIER','Vehicle No','RATE','AMOUNT','PAID','BALANCE','REMARKS']];
+  let tQ=0,tA=0,tP=0,tB=0;
+  (DB.materials||[]).filter(m=>(m.date||'').slice(0,7)===matMonth && (!matVendor||m.vendorId===matVendor))
+    .sort((a,b)=>a.date.localeCompare(b.date)).forEach(m=>{const bal=round2((+m.amount||0)-(+m.paid||0));
+      tQ+=+m.qty||0;tA+=+m.amount||0;tP+=+m.paid||0;tB+=bal;
+      rows.push([m.date,m.material,m.qty,vendor(m.vendorId).name||'',m.vehicleNo||'',m.rate,m.amount,m.paid||0,bal,m.remarks||'']);});
+  rows.push(['TOTAL','',round2(tQ),'','','',round2(tA),round2(tP),round2(tB),'']);
+  downloadCSV('DNK_Materials_'+matMonth+'.csv',rows);
+}
+function printMaterialSummary(){
+  const list=(DB.materials||[]).filter(m=>(m.date||'').slice(0,7)===matMonth && (!matVendor||m.vendorId===matVendor))
+    .sort((a,b)=>a.date.localeCompare(b.date)||(vendor(a.vendorId).name||'').localeCompare(vendor(b.vendorId).name||''));
+  if(!list.length)return toast('No materials to summarise','err');
+  const co=DB.company;
+  const byDate={};
+  list.forEach(m=>{ (byDate[m.date]=byDate[m.date]||[]).push(m); });
+  let body='';
+  Object.keys(byDate).sort().forEach(date=>{
+    const byVendor={};
+    byDate[date].forEach(m=>{ const k=m.vendorId||'—'; (byVendor[k]=byVendor[k]||[]).push(m); });
+    body+=`<h3 style="margin:16px 0 4px">${fmtDate(date)}</h3>`;
+    Object.keys(byVendor).forEach(vid=>{
+      const items=byVendor[vid]; const vName=vendor(vid).name||'Unknown vendor';
+      let sQ=0,sA=0,sP=0;
+      const rows=items.map(m=>{sQ+=+m.qty||0;sA+=+m.amount||0;sP+=+m.paid||0;
+        return `<tr><td>${esc(m.material)}</td><td class="r">${(+m.qty||0).toFixed(2)}</td><td>${esc(m.vehicleNo)||'-'}</td><td class="r">${inr(m.rate)}</td><td class="r">${inr(m.amount)}</td><td class="r">${inr(m.paid||0)}</td></tr>`;}).join('');
+      body+=`<div style="font-weight:700;margin-top:8px">${esc(vName)}</div>
+        <table><thead><tr><th>Material</th><th class="r">Qty</th><th>Vehicle</th><th class="r">Rate</th><th class="r">Amount</th><th class="r">Paid</th></tr></thead>
+        <tbody>${rows}<tr class="tot"><td>Subtotal</td><td class="r">${sQ.toFixed(2)}</td><td></td><td></td><td class="r">${inr(sA)}</td><td class="r">${inr(sP)}</td></tr></tbody></table>`;
+    });
+  });
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>Materials Received — ${monthName(matMonth)}</title>
+    <style>body{font-family:"Segoe UI",Arial,sans-serif;color:#111;font-size:12px;padding:16px}
+    h2{margin:0}.muted{color:#666}table{border-collapse:collapse;width:100%;margin-top:4px}
+    td,th{border:1px solid #999;padding:4px 7px}.r{text-align:right}th{background:#f0f0f0;text-align:left}
+    .tot{font-weight:700;background:#f7f7f7}
+    .head{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #14508c;padding-bottom:8px}</style></head><body>
+    <div class="head"><div><h2>${esc(co.name)}</h2><div class="muted">Materials Received — ${monthName(matMonth)}${matVendor?(' • '+esc(vendor(matVendor).name||'')):''}</div></div>
+      <img src="${window.LOGO_DATA}" style="width:64px;height:64px;object-fit:contain"></div>
+    ${body}
+    <div class="muted" style="margin-top:16px;text-align:center">Computer-generated materials-received summary.</div>
+    </body></html>`;
+  openPrint(html);
+}
+
+/* ================= VEHICLE LOG (daily odometer + fuel per vehicle) ================= */
+let vlVehicle='', vlMonth=todayISO().slice(0,7);
+function renderVehicleLog(){
+  vlMonth=vlMonth||todayISO().slice(0,7);
+  const vehs=DB.vehicles||[];
+  if((!vlVehicle||!vehs.some(v=>v.id===vlVehicle)) && vehs.length) vlVehicle=vehs[0].id;
+  const logs=(DB.vehicleLogs||[]).filter(l=>l.vehicleId===vlVehicle && (l.date||'').slice(0,7)===vlMonth).sort((a,b)=>a.date.localeCompare(b.date));
+  const totDist=logs.reduce((s,l)=>s+Math.max(0,(+l.curr||0)-(+l.prev||0)),0);
+  const totFuel=logs.reduce((s,l)=>s+(+l.amount||0),0);
+  const actions=canEdit()&&vehs.length?`<button class="btn gold" onclick="vlModal()">➕ Add Reading</button>`:'';
+  document.getElementById('main').innerHTML=
+    topbar('Vehicle Log','Daily odometer &amp; fuel log — distance auto-calculated',actions)+
+    (vehs.length?`<div class="toolbar">
+      <select id="vlVehicle" onchange="vlVehicle=this.value;renderVehicleLog()" style="max-width:240px">
+        ${vehs.map(v=>`<option value="${v.id}" ${vlVehicle===v.id?'selected':''}>${esc(v.number)}${v.driver?(' — '+esc(v.driver)):''}</option>`).join('')}
+      </select>
+      <input type="month" id="vlMonth" value="${vlMonth}" onchange="vlMonth=this.value;renderVehicleLog()" style="max-width:170px">
+      <button class="btn ghost" onclick="exportVehicleLogCSV()">⬇ Vehicle Report (CSV)</button>
+    </div>
+    <div class="grid kpis" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">
+      <div class="kpi blue"><div class="lab">Readings</div><div class="val">${logs.length}</div></div>
+      <div class="kpi accent"><div class="lab">Distance (km)</div><div class="val">${totDist}</div></div>
+      <div class="kpi green"><div class="lab">Fuel Amount</div><div class="val">₹${inr(totFuel)}</div></div>
+    </div>
+    <div class="card"><div class="hd"><h3>${vehicle(vlVehicle).number||'Vehicle'} — ${monthName(vlMonth)}</h3></div><div class="bd" style="padding:0" id="vlTbl"></div></div>`
+    :`<div class="empty">Add a vehicle first in Vehicles &amp; Drivers.</div>`);
+  if(vehs.length) drawVehicleLog();
+}
+function drawVehicleLog(){
+  const logs=(DB.vehicleLogs||[]).filter(l=>l.vehicleId===vlVehicle && (l.date||'').slice(0,7)===vlMonth).sort((a,b)=>a.date.localeCompare(b.date));
+  document.getElementById('vlTbl').innerHTML=logs.length?
+    `<table class="table"><thead><tr><th>Date</th><th class="num">Previous</th><th class="num">Current</th><th class="num">Distance (km)</th><th>Fuel Filled</th><th class="num">Amount</th><th class="right"></th></tr></thead><tbody>`+
+    logs.map(l=>{const dist=Math.max(0,(+l.curr||0)-(+l.prev||0));
+      return `<tr><td>${fmtDate(l.date)}</td><td class="num">${l.prev||0}</td><td class="num">${l.curr||0}</td><td class="num"><b>${dist}</b></td><td>${esc(l.fuel)||'-'}</td><td class="num">₹${inr(l.amount||0)}</td>
+      <td class="right">${canEdit()?`<button class="btn ghost sm" onclick="vlModal('${l.id}')">✎</button><button class="btn danger sm" onclick="delVehicleLog('${l.id}')">✕</button>`:''}</td></tr>`;}).join('')+`</tbody></table>`
+    :`<div class="empty">No readings for this vehicle in ${monthName(vlMonth)}.</div>`;
+}
+function vlModal(id){
+  const l=id?(DB.vehicleLogs||[]).find(x=>x.id===id):null;
+  const prevLogs=(DB.vehicleLogs||[]).filter(x=>x.vehicleId===vlVehicle).sort((a,b)=>a.date.localeCompare(b.date));
+  const lastCurr=prevLogs.length?prevLogs[prevLogs.length-1].curr:'';
+  const d=l||{date:todayISO(),prev:lastCurr,curr:'',fuel:'',amount:''};
+  modal((id?'Edit':'Add')+' Reading — '+(vehicle(vlVehicle).number||''),
+    `<div class="form-grid">
+      <div class="field"><label>Date</label><input id="vl_date" type="date" value="${d.date||todayISO()}" max="${todayISO()}"></div>
+      <div class="field"><label>Previous Reading</label><input id="vl_prev" type="number" value="${d.prev!==''&&d.prev!=null?d.prev:''}" oninput="vlDist()"></div>
+      <div class="field"><label>Current Reading</label><input id="vl_curr" type="number" value="${d.curr!==''&&d.curr!=null?d.curr:''}" oninput="vlDist()"></div>
+      <div class="field"><label>Distance (km)</label><input id="vl_dist" readonly value=""></div>
+      <div class="field"><label>Fuel Filled</label><input id="vl_fuel" value="${esc(d.fuel)}" placeholder="FULL / 20L / -"></div>
+      <div class="field"><label>Fuel Amount (₹)</label><input id="vl_amt" type="number" step="0.01" value="${d.amount!==''&&d.amount!=null?d.amount:''}"></div>
+    </div>`,
+    `<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn green" onclick="saveVehicleLog('${id||''}')">Save</button>`);
+  vlDist();
+}
+function vlDist(){ const p=Number(val('vl_prev'))||0,c=Number(val('vl_curr'))||0; const e=document.getElementById('vl_dist'); if(e)e.value=Math.max(0,c-p); }
+function saveVehicleLog(id){
+  if(!guardEdit())return;
+  const date=val('vl_date')||todayISO();
+  if(date>todayISO())return toast('Cannot log a future date','err');
+  const prev=Number(val('vl_prev'))||0, curr=Number(val('vl_curr'))||0;
+  if(curr<prev)return toast('Current reading cannot be less than previous','err');
+  const o={vehicleId:vlVehicle,date,prev,curr,fuel:val('vl_fuel'),amount:Number(val('vl_amt'))||0};
+  DB.vehicleLogs=DB.vehicleLogs||[];
+  if(id){ Object.assign(DB.vehicleLogs.find(x=>x.id===id),o); }
+  else { o.id=uid('vl'); o.at=nowStamp(); DB.vehicleLogs.push(o); }
+  logAct(id?'Vehicle log updated':'Vehicle reading added',(vehicle(vlVehicle).number||'')+' '+date);
+  save(); closeModal(); toast('Reading saved','ok'); renderVehicleLog();
+}
+function delVehicleLog(id){ if(!guardEdit())return; if(confirm('Delete this reading?')){ DB.vehicleLogs=DB.vehicleLogs.filter(l=>l.id!==id); save(); renderVehicleLog(); } }
+function exportVehicleLogCSV(){
+  const v=vehicle(vlVehicle);
+  const rows=[['DATE','PREVIOUS READING','CURRENT READING','DISTANCE (KM)','FUEL FILLED','AMOUNT']];
+  let tD=0,tA=0;
+  (DB.vehicleLogs||[]).filter(l=>l.vehicleId===vlVehicle && (l.date||'').slice(0,7)===vlMonth).sort((a,b)=>a.date.localeCompare(b.date))
+    .forEach(l=>{const dist=Math.max(0,(+l.curr||0)-(+l.prev||0));tD+=dist;tA+=+l.amount||0;
+      rows.push([l.date,l.prev||0,l.curr||0,dist,l.fuel||'',l.amount||0]);});
+  rows.push(['TOTAL','','',tD,'',round2(tA)]);
+  downloadCSV('DNK_VehicleLog_'+(v.number||'vehicle')+'_'+vlMonth+'.csv',rows);
+}
+
 /* ================= ACTIVITY LOG (audit trail) ================= */
 let actSearch='';
 function renderActivity(){
@@ -1710,8 +2118,8 @@ function drawActivity(){
     .slice(0,400);
   document.getElementById('actTbl').innerHTML = list.length?
     `<table class="table"><thead><tr><th>Date / Time</th><th>User</th><th>Role</th><th>Action</th><th>Details</th></tr></thead><tbody>`+
-    list.map(a=>`<tr><td style="white-space:nowrap">${a.at||''}</td><td><b>${a.user||''}</b></td><td>${a.role||''}</td>
-      <td>${a.action||''}</td><td>${a.detail||''}</td></tr>`).join('')+`</tbody></table>`
+    list.map(a=>`<tr><td style="white-space:nowrap">${esc(a.at)}</td><td><b>${esc(a.user)}</b></td><td>${esc(a.role)}</td>
+      <td>${esc(a.action)}</td><td>${esc(a.detail)}</td></tr>`).join('')+`</tbody></table>`
     : `<div class="empty">No activity recorded yet.</div>`;
 }
 function clearActivity(){
@@ -1749,7 +2157,7 @@ function safeName(s){ return String(s||'').replace(/[^A-Za-z0-9]+/g,'_').replace
 function zipModal(){
   modal('Bulk Invoice Download (ZIP)',
     `<div class="form-grid">
-      <div class="field full"><label>Customer</label><select id="zp_cust"><option value="">All customers</option>${DB.customers.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}</select></div>
+      <div class="field full"><label>Customer</label><select id="zp_cust"><option value="">All customers</option>${DB.customers.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select></div>
       <div class="field"><label>From date</label><input id="zp_from" type="date"></div>
       <div class="field"><label>To date</label><input id="zp_to" type="date"></div>
     </div>
@@ -1783,7 +2191,7 @@ function modal(title,body,footer){
   el.onclick=e=>{if(e.target===el)closeModal();};
   document.body.appendChild(el);
 }
-function closeModal(){ const m=document.getElementById('modalBg'); if(m)m.remove(); }
+function closeModal(){ const m=document.getElementById('modalBg'); if(m)m.remove(); if(CLOUD.pending){ const j=CLOUD.pending; CLOUD.pending=null; cloudApply(j); } }
 let toastTimer;
 function toast(msg,type){
   let t=document.getElementById('toast');
@@ -1794,3 +2202,5 @@ function toast(msg,type){
 
 /* ---------------- Boot ---------------- */
 renderApp();
+cloudBadge();
+cloudInit();

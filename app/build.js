@@ -27,6 +27,7 @@ fs.writeFileSync('dist-artifact.html', body);
 const firebaseHead = `
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
 <script>
 try{
   firebase.initializeApp({
@@ -39,7 +40,8 @@ try{
   });
   window.fbApp = firebase.app();
   window.fbAuth = firebase.auth();
-}catch(e){ window.fbApp=null; window.fbAuth=null; }
+  try{ window.fbDb = firebase.firestore(); }catch(e){ window.fbDb=null; }
+}catch(e){ window.fbApp=null; window.fbAuth=null; window.fbDb=null; }
 </script>`;
 
 // 2) Standalone (double-click / host anywhere)

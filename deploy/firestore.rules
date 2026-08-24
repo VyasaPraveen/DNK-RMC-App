@@ -1,0 +1,19 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // The whole app shares one document: app/main (a JSON blob of the DB).
+    // Any signed-in client (including anonymous) may read/write it. The app's own
+    // username/password login gates the UI; this rule gates the data at rest so it
+    // is never world-open. Tighten to named accounts later if stricter control
+    // is required.
+    match /app/{docId} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Everything else is denied.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
