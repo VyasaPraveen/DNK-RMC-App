@@ -5,6 +5,9 @@ function inr(n){ return Number(n||0).toLocaleString('en-IN',{minimumFractionDigi
 /* ---- Number to Indian words with paisa ---- */
 function numToWords(num){
   num = Math.round(Number(num)*100)/100;
+  if(isNaN(num)) num = 0;
+  const neg = num < 0;                 // guard negatives (e.g. advance > salary) so the
+  num = Math.abs(num);                 // recursion below never gets a negative and breaks
   const rupees = Math.floor(num);
   const paise = Math.round((num-rupees)*100);
   const a=['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten','Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen','Eighteen','Nineteen'];
@@ -24,7 +27,7 @@ function numToWords(num){
     if(hundred) str+=three(hundred);
     return str.trim();
   }
-  let words='INR '+inWords(rupees)+' Rupees';
+  let words=(neg?'INR Minus ':'INR ')+inWords(rupees)+' Rupees';
   if(paise>0) words+=' and '+two(paise)+' Paisa';
   return words+' Only';
 }
@@ -68,29 +71,32 @@ function invoiceHTML(inv, company, opts){
   const docTitle = isChallan ? 'Delivery Challan' : (c.noGst ? 'Invoice (Bill of Supply)' : 'Tax Invoice');
   return `<!doctype html><html><head><meta charset="utf-8"><title>${docTitle} ${esc(inv.no)}</title>
   <style>
-    @page{size:A4;margin:12mm}
+    /* margin:0 removes the browser-added date/URL/page-number header & footer.
+       Page breathing room comes from body padding instead. */
+    @page{size:A4;margin:0}
     *{box-sizing:border-box}
-    body{font-family:"Segoe UI",Arial,sans-serif;color:#111;font-size:11px;margin:0}
-    .doc{border:1px solid #000}
+    html,body{margin:0}
+    body{font-family:"Segoe UI",Arial,sans-serif;color:#111;font-size:11px;padding:12mm}
+    .doc{border:1.2px solid #000}
     .title{text-align:center;font-weight:700;padding:5px;font-size:13px;position:relative}
     .title .copy{position:absolute;right:6px;top:5px;font-size:9px;font-weight:400;color:#555}
     table{border-collapse:collapse;width:100%}
-    td,th{border:1px solid #000;padding:3px 5px;vertical-align:top}
+    td,th{border:1px solid #000;padding:4px 6px;vertical-align:top}
     .noborder td{border:none}
     .r{text-align:right}.c{text-align:center}.b{font-weight:700}
     .head td{vertical-align:top}
     .seller b{font-size:12px}
     .small{font-size:10px}
-    .items th{background:#f2f2f2;text-align:center;font-size:10px}
-    .items .desc{min-height:150px}
+    .items th{background:#f2f2f2;text-align:center;font-size:10px;vertical-align:middle}
+    .items td{vertical-align:middle}
+    .items .desc{min-height:150px;vertical-align:top}
     .words{padding:4px 6px;font-weight:700}
     .bank td{border:none;padding:1px 5px}
     .sign{height:70px}
     .logo{width:70px;height:70px;object-fit:contain;float:left;margin-right:8px}
     .qr{width:64px;height:64px}
     .foot{text-align:center;font-style:italic;padding:5px;font-size:10px}
-    @media print{.noprint{display:none};body{margin:0}}
-    body{padding:14px}
+    @media print{.noprint{display:none}}
   </style></head><body>
   <div class="doc">
     <div class="title">${isChallan?'DELIVERY CHALLAN':(c.noGst?'INVOICE / BILL OF SUPPLY':'TAX INVOICE')}<span class="copy">${isChallan?'':'(ORIGINAL FOR RECIPIENT)'}</span></div>
@@ -240,7 +246,7 @@ function batchSlipHTML(inv, company, mix){
     return `<tr><td>${r[0]}</td><td class="r">${per.toFixed(2)} ${r[2]}/Cum</td><td class="r"><b>${tot.toFixed(2)} ${r[2]}</b>${extra}</td></tr>`;
   }).join('');
   return `<!doctype html><html><head><meta charset="utf-8"><title>Batching Slip — ${esc(inv.no)}</title>
-    <style>body{font-family:"Segoe UI",Arial,sans-serif;color:#111;font-size:12px;padding:16px}
+    <style>@page{size:A4;margin:0}body{font-family:"Segoe UI",Arial,sans-serif;color:#111;font-size:12px;padding:12mm;margin:0}
     h2{margin:0}.muted{color:#666}table{border-collapse:collapse;width:100%;margin-top:10px}
     td,th{border:1px solid #999;padding:5px 7px}.r{text-align:right}th{background:#f0f0f0;text-align:left}
     .head{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #14508c;padding-bottom:8px}

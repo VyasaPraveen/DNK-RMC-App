@@ -27,10 +27,23 @@ function normKey(s){ return String(s==null?'':s).trim().toLowerCase(); }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 /* ---------------- Input validation & normalisation ----------------
-   GSTIN = 2 digits + 5 letters + 4 digits + 1 letter + 1 digit + 2 letters
-   e.g. 37ATRPK7789E1ZU / 29AAPCS5668E1ZP */
-const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][0-9][A-Z]{2}$/;
+   Standard GSTIN (15 chars): 2 state digits + 10-char PAN (5 letters, 4 digits,
+   1 letter) + 1 entity char (1-9/A-Z) + fixed 'Z' + 1 checksum char (0-9/A-Z).
+   e.g. 37ATRPK7789E1ZU, 29AAPCS5668E1ZP, 29AAQFN9165M1Z6 (checksum can be a digit). */
+const GSTIN_RE = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 function gstinValid(s){ return GSTIN_RE.test(String(s||'').toUpperCase().trim()); }
+/* Indian mobile number: exactly 10 digits, starts 6-9, and not an obviously
+   fake value (all-same like 1111111111, or a short block repeated like
+   0101010101 / 1231231231). Empty = allowed (phone is optional). */
+function phoneValid(s){
+  s=String(s||'').trim();
+  if(s==='') return true;
+  if(!/^[6-9][0-9]{9}$/.test(s)) return false;        // 10 digits, valid mobile prefix
+  if(/^(.)\1{9}$/.test(s)) return false;              // all identical digits
+  for(let len=1;len<=5;len++){ const p=s.slice(0,len); if(p.repeat(Math.ceil(10/len)).slice(0,10)===s) return false; }
+  if('0123456789'.includes(s)||'9876543210'.includes(s)) return false; // pure sequential
+  return true;
+}
 /* live-format an <input> as the user types (keeps caret position) */
 function fmtInput(id,transform){ const e=document.getElementById(id); if(!e)return; const p=e.selectionStart; e.value=transform(e.value); try{e.setSelectionRange(p,p);}catch(_){}
 }
@@ -45,6 +58,23 @@ function phoneOk(s){ s=String(s||'').trim(); return s==='' || /^[0-9]{1,10}$/.te
    Core modules (dashboard, settings, users) are always on so admin can't lock out. */
 const CORE_FEATURES = {dashboard:1,settings:1,users:1};
 function featureOn(r){ if(CORE_FEATURES[r]) return true; return !DB.features || DB.features[r]!==false; }
+
+/* ------- No-code option lists -------------------------------------------------
+   Every dropdown choice below can be added / renamed / removed by the Admin from
+   Settings → Manage Lists & Options (stored in DB.lists, synced to all devices).
+   optList(key) returns the Admin's custom list when present, else the default. */
+const DEFAULT_LISTS = {
+  dispatchThrough:   {label:'Dispatched Through — Invoice',        items:['Transit Mixer','Tipper','Pump']},
+  productCategories: {label:'Product Categories — Inventory',      items:['Cement','Aggregate','Admixture','Fuel','Steel','Other']},
+  productUnits:      {label:'Units of Measure — Inventory',        items:['Bags','MT','Kg','Cft','Litre','Nos']},
+  materialTypes:     {label:'Material Types — Materials Received',  items:['12MM','20MM','10MM','DUST','M SAND','FLYASH','CEMENT','CEMENT LOOSE','ADMIXTURE','PLASTICISER','OTHER']},
+  leadStatus:        {label:'Lead Stages — Leads & Follow-up',     items:['New','Contacted','Quoted','Won','Lost']},
+};
+function optList(key){
+  const def=((DEFAULT_LISTS[key]||{}).items||[]).slice();
+  const cur=(typeof DB!=='undefined'&&DB&&DB.lists)?DB.lists[key]:null;
+  return (Array.isArray(cur)&&cur.length)?cur.slice():def;
+}
 
 /* Role presets — Admin (full), Accountant (operations, no users/settings/audit),
    Auditor (read-only: can view records & audit log, cannot create/edit/delete). */
@@ -89,7 +119,7 @@ function seed(){
       {id:'c1',name:'S & A INFRA',gstin:'24AEBFS2259C1ZE',state:'Gujarat',stateCode:'24',
         address:'Shop no. 7, Padma Shopping Centre,\nBhula Nagar Chanod, Vapi, Valsad,\nGujarat - 396191',phone:''},
       {id:'c2',name:'Sri Balaji Constructions',gstin:'37ABCDS1234E1Z5',state:'Andhra Pradesh',stateCode:'37',
-        address:'Kuppam Road, Palamaner,\nChittoor Dist., Andhra Pradesh - 517408',phone:'9876543210'},
+        address:'Kuppam Road, Palamaner,\nChittoor Dist., Andhra Pradesh - 517408',phone:'9848012345'},
       {id:'c3',name:'Ravi Kumar (Individual)',gstin:'',state:'Andhra Pradesh',stateCode:'37',
         address:'H.No 4-521, Bypass Road,\nV.Kota, Chittoor Dist., A.P. - 517424',phone:'9700011223'},
     ],
@@ -544,7 +574,7 @@ function renderDashboard(){
   const totalOut=dueList.reduce((s,i)=>s+(invTotals(i).grand-(i.paid||0)),0);
   const dueCusts=new Set(dueList.map(i=>i.customerId)).size;
   const activeStaff=(DB.staff||[]).filter(s=>s.active!==false).length;
-  const recent=[...invs].sort((a,b)=>(b.date+b.no).localeCompare(a.date+a.no)).slice(0,10);
+  const recent=[...invs].sort((a,b)=>cmpByDateThenNo(b,a)).slice(0,10);
 
   const dispatchRows = recent.length ? recent.map(i=>
      `<div class="dashrow"><div class="r-l">${fmtDate(i.date)} <span class="r-sub">${i.no}</span></div>
@@ -628,7 +658,7 @@ function renderNewInvoice(editId){
             <label style="display:flex;align-items:center;gap:8px;font-weight:500;font-size:13px;height:38px"><input type="checkbox" id="f_pumpgst" ${form.pumpGst?'checked':''} onchange="onCalc()" style="width:auto"> Apply GST on pump charges</label></div>
           <div class="field"><label>Invoice Date</label><input id="f_date" type="date" value="${form.date}"></div>
           <div class="field"><label>Dispatched Through</label>
-            <select id="f_dispatch">${['Transit Mixer','Tipper','Pump'].map(o=>`<option ${o===form.dispatchThrough?'selected':''}>${o}</option>`).join('')}</select></div>
+            <select id="f_dispatch">${optList('dispatchThrough').map(o=>`<option ${o===form.dispatchThrough?'selected':''}>${esc(o)}</option>`).join('')}</select></div>
           <div class="field"><label>Invoice Number ${unreg?'<span class="muted">(editable — unregistered buyer)</span>':''}</label>
             <input id="f_no" value="${form.no||autoNo}" ${unreg?'':'readonly'} title="${unreg?'Editable for unregistered buyers':'Auto-numbered for registered buyers'}"></div>
         </div>
@@ -697,6 +727,10 @@ function calcBox(){
 /* Keep DB.seq aligned to the highest DNK/<n> in use, so deleting the latest
    invoice frees its number and the next bill follows up sequentially. */
 function recomputeSeq(){ let mx=0; (DB.invoices||[]).forEach(i=>{ const m=/^DNK\/(\d+)$/.exec(i.no||''); if(m){ const n=+m[1]; if(n>mx) mx=n; } }); DB.seq=mx; }
+/* Numeric-aware invoice-number ordering — so DNK/10, DNK/11 sort after DNK/9 (not as text). */
+function invNoKey(no){ const m=/(\d+)\s*$/.exec(String(no||'')); return m?parseInt(m[1],10):0; }
+function cmpInvNo(a,b){ return (invNoKey(a.no)-invNoKey(b.no)) || String(a.no).localeCompare(String(b.no),undefined,{numeric:true}); }
+function cmpByDateThenNo(a,b){ return (a.date<b.date?-1:a.date>b.date?1:0) || cmpInvNo(a,b); }
 function saveInvoice(){
   if(!guardEdit())return;
   readForm();
@@ -745,13 +779,15 @@ function printChallan(id){ const inv=DB.invoices.find(i=>i.id===id); openPrint(i
 function printBatch(id){ const inv=DB.invoices.find(i=>i.id===id); const g=grade(inv.gradeId); openPrint(batchSlipHTML(hydrate(inv),DB.company,g.mix||DEFAULT_MIX)); }
 
 /* ---------------- Invoices list ---------------- */
-let invSearch='', invCust='';
+let invSearch='', invCust='', invFrom='', invTo='';
+function invDateSet(which,v){ if(which==='from')invFrom=v; else invTo=v; drawInvList(); }
+function invClearDates(){ invFrom=''; invTo=''; const f=document.getElementById('invFrom'),t=document.getElementById('invTo'); if(f)f.value=''; if(t)t.value=''; drawInvList(); }
 function renderInvoices(){
   document.getElementById('main').innerHTML=
-    topbar('Invoices','Search, filter by customer, print & download',
+    topbar('Invoices','Search, filter by customer & date, print & download',
       `<button class="btn gold" onclick="go('newinvoice')">➕ New Bill</button>`)+
     `<div class="toolbar">
-      <input class="search" id="invSearch" placeholder="🔍 Search invoice no, customer, grade, vehicle…" value="${invSearch}" oninput="invSearch=this.value;drawInvList()">
+      <input class="search" id="invSearch" placeholder="🔍 Search invoice no, customer, grade, vehicle…" value="${esc(invSearch)}" oninput="invSearch=this.value;drawInvList()">
       <select id="invCust" onchange="invCust=this.value;drawInvList()" style="max-width:230px">
         <option value="">All customers</option>
         ${DB.customers.map(c=>`<option value="${c.id}" ${invCust===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}
@@ -761,6 +797,13 @@ function renderInvoices(){
       ${invCust?`<button class="btn ghost" onclick="exportTollCSV('${invCust}')">⬇ Toll Register</button>
         <button class="btn ghost" onclick="printStatement('${invCust}')">🖨 Statement PDF</button>`:''}
     </div>
+    <div class="toolbar" style="margin-top:-6px">
+      <label style="font-size:12px;color:var(--muted)">From</label>
+      <input type="date" id="invFrom" value="${invFrom}" onchange="invDateSet('from',this.value)" style="max-width:160px">
+      <label style="font-size:12px;color:var(--muted)">To</label>
+      <input type="date" id="invTo" value="${invTo}" onchange="invDateSet('to',this.value)" style="max-width:160px">
+      ${(invFrom||invTo)?`<button class="btn ghost sm" onclick="invClearDates()">✕ Clear dates</button>`:''}
+    </div>
     <div class="card"><div class="bd" style="padding:0" id="invList"></div></div>`;
   drawInvList();
 }
@@ -768,9 +811,11 @@ function drawInvList(){
   const q=invSearch.toLowerCase();
   const list=DB.invoices.filter(i=>{
     if(invCust && i.customerId!==invCust) return false;
+    if(invFrom && (i.date||'')<invFrom) return false;
+    if(invTo && (i.date||'')>invTo) return false;
     const c=customer(i.customerId),g=grade(i.gradeId),v=vehicle(i.vehicleId);
     return !q || [i.no,c.name,g.name,v.number,i.date].join(' ').toLowerCase().includes(q);
-  }).sort((a,b)=>b.no.localeCompare(a.no));
+  }).sort((a,b)=>cmpInvNo(b,a));
   document.getElementById('invList').innerHTML=
     (list.length?`<table class="table"><thead><tr><th>Invoice #</th><th>Date</th><th>Customer</th><th>Grade</th><th class="num">Qty</th><th class="num">Total</th><th class="num">Due</th><th>Status</th><th class="right">Actions</th></tr></thead><tbody>`+
     list.map(i=>{const t=invTotals(i);const due=t.grand-(i.paid||0);
@@ -888,7 +933,7 @@ function saveCust(id){
   const o={name:val('c_name'),gstin:val('c_gstin').toUpperCase(),state:val('c_state'),stateCode:val('c_scode'),address:val('c_addr'),phone:val('c_phone')};
   if(!o.name)return toast('Name required','err');
   if(o.gstin && !gstinValid(o.gstin))return toast('Invalid GSTIN — format: 22AAAAA0000A1Z5','err');
-  if(!phoneOk(o.phone))return toast('Phone must be up to 10 digits','err');
+  if(!phoneValid(o.phone))return toast('Enter a valid 10-digit mobile number (starts 6-9; not a repeated/sequential number)','err');
   if(id){ Object.assign(customer(id),o); } else { DB.customers.push({id:uid('c'),...o}); }
   save(); closeModal(); toast('Customer saved','ok'); renderCustomers();
 }
@@ -939,7 +984,7 @@ function vehModal(id){
 }
 function saveVeh(id){ if(!guardEdit())return; const o={number:val('v_num').toUpperCase(),driver:val('v_drv'),driverPhone:val('v_ph'),capacity:val('v_cap')};
   if(!o.number)return toast('Vehicle number required','err');
-  if(!phoneOk(o.driverPhone))return toast('Driver phone must be up to 10 digits','err');
+  if(!phoneValid(o.driverPhone))return toast('Enter a valid 10-digit driver mobile number (starts 6-9)','err');
   if(id){Object.assign(vehicle(id),o);}else{DB.vehicles.push({id:uid('v'),...o});}
   save();closeModal();toast('Vehicle saved','ok');renderVehicles(); }
 function delVeh(id){ if(!guardEdit())return; if(confirm('Delete vehicle?')){ DB.vehicles=DB.vehicles.filter(v=>v.id!==id); save(); renderVehicles(); } }
@@ -1027,7 +1072,7 @@ function renderReports(){
       <button class="btn ghost" onclick="exportMonthlyCSV()">⬇ Monthly Summary (CSV)</button>
       <label style="font-size:12px;color:var(--muted)">GST Register</label>
       <input type="month" id="gstMonth" value="${todayISO().slice(0,7)}" style="max-width:150px">
-      <button class="btn ghost" onclick="exportGSTRegister(document.getElementById('gstMonth').value)">⬇ GST Sales Register</button>
+      <button class="btn ghost" onclick="exportGSTRegister(document.getElementById('gstMonth').value)">⬇ GSTR Sales Register (Tally)</button>
       <button class="btn ghost" onclick="zipModal()">🗜 Bulk Invoice ZIP</button>
     </div>
     <div class="card" style="margin-bottom:16px"><div class="hd"><h3>Customer Statement &amp; Toll Register</h3></div><div class="bd">
@@ -1069,37 +1114,62 @@ function downloadCSV(name,rows){
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;a.click();
   toast('Exported '+name,'ok');
 }
-/* GST Sales Register — Tally-style monthly export (matches GST Format template) */
+/* GST Sales Register — Tally-style monthly export that mirrors the client's GSTR
+   sheet exactly: D-Mon-YY dates, Dr/Cr suffixes, and these precise columns so the
+   file can be read into Tally / handed to the accountant as-is. */
+function tallyDate(iso){ // 2026-07-01 -> "1-Jul-26"
+  if(!iso) return '';
+  const M=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const p=String(iso).slice(0,10).split('-'); if(p.length<3) return iso;
+  return String(parseInt(p[2],10))+'-'+(M[parseInt(p[1],10)-1]||'')+'-'+p[0].slice(2);
+}
+function drCr(n,side){ // format an amount with a Dr/Cr suffix; blank when zero
+  n=round2(n||0); if(!n) return '';
+  return Math.abs(n).toFixed(2)+' '+side;
+}
 function exportGSTRegister(ym){
   ym=ym||todayISO().slice(0,7);
-  const co=DB.company;
-  const invs=DB.invoices.filter(i=>(i.date||'').slice(0,7)===ym).slice().sort((a,b)=>(a.date+a.no).localeCompare(b.date+b.no));
+  const invs=DB.invoices.filter(i=>(i.date||'').slice(0,7)===ym).slice().sort(cmpByDateThenNo);
   if(!invs.length) return toast('No invoices in '+monthName(ym),'err');
-  const rows=[[co.name],['Sales Register'],[monthName(ym)],
-    ['Date','Particulars','Voucher Type','Voucher No.','Voucher Ref. No.','GSTIN/UIN','GRADE','Qty','Gross Total','Local Sales @ 18%','Output CGST @ 9%','Output SGST @ 9%','Interstate Sales @ 18%','Output IGST @ 18%','Round Off']];
-  let tG=0,tLocal=0,tC=0,tS=0,tInter=0,tI=0;
+  const rows=[['Date','Particulars','Voucher Type','Voucher No.','Voucher Ref. No.','GSTIN/UIN',
+    'Gross Total','Local Sales @ 18%','Output CGST @ 9%','Output SGST @ 9%','Interstate Sales @ 18%','Output IGST @ 18%','Round Off']];
+  let tG=0,tLocal=0,tC=0,tS=0,tInter=0,tI=0,tR=0;
   invs.forEach(i=>{const h=hydrate(i);const t=invTotals(i);
     const gross=round2(t.grand);
     const roundOff=round2(Math.round(gross)-gross);
-    const local=(!t.noGst&&!t.interState)?t.baseTaxable:'';
-    const inter=(!t.noGst&&t.interState)?t.baseTaxable:'';
-    tG+=gross;tLocal+=(local||0);tC+=t.cgst;tS+=t.sgst;tInter+=(inter||0);tI+=t.igst;
-    rows.push([fmtDate(i.date),h.buyerName,'Sales',i.no,i.no,h.buyerGstin||'',h.gradeName,i.qty,gross,local,t.cgst||'',t.sgst||'',inter,t.igst||'',roundOff||'']);});
-  rows.push(['','','','','','','TOTAL','',round2(tG),round2(tLocal),round2(tC),round2(tS),round2(tInter),round2(tI),'']);
-  downloadCSV('DNK_GST_SalesRegister_'+ym+'.csv',rows);
+    const local=(!t.noGst&&!t.interState)?round2(t.baseTaxable):0;
+    const inter=(!t.noGst&&t.interState)?round2(t.baseTaxable):0;
+    tG+=gross;tLocal+=local;tC+=t.cgst;tS+=t.sgst;tInter+=inter;tI+=t.igst;tR+=roundOff;
+    rows.push([tallyDate(i.date),h.buyerName,'Sales',i.no,i.no,h.buyerGstin||'',
+      drCr(gross,'Dr'),drCr(local,'Cr'),drCr(t.cgst,'Cr'),drCr(t.sgst,'Cr'),drCr(inter,'Cr'),drCr(t.igst,'Cr'),
+      roundOff?drCr(roundOff,roundOff>0?'Cr':'Dr'):'']);});
+  rows.push(['','Grand Total','','','','',
+    drCr(tG,'Dr'),drCr(tLocal,'Cr'),drCr(tC,'Cr'),drCr(tS,'Cr'),drCr(tInter,'Cr'),drCr(tI,'Cr'),
+    round2(tR)?drCr(tR,round2(tR)>0?'Cr':'Dr'):'0.00 Cr']);
+  downloadCSV('DNK_GSTR_SalesRegister_'+ym+'.csv',rows);
 }
 function exportInvoicesCSV(customerId){
-  const rows=[['Invoice No','Date','Customer','GSTIN','State','Site','Grade','HSN','Vehicle','Qty(Cum)','Rate','Taxable','GST Type','GST Amt','Grand Total','Paid','Due']];
-  DB.invoices.filter(i=>!customerId||i.customerId===customerId).slice().sort((a,b)=>a.no.localeCompare(b.no)).forEach(i=>{const h=hydrate(i);const t=invTotals(i);
-    rows.push([i.no,i.date,h.buyerName,h.buyerGstin||'',h.buyerState,h.siteName||'',h.gradeName,h.hsn,h.vehicle,i.qty,i.rate,
-      t.taxable,t.noGst?'No GST':(t.interState?'IGST':'CGST+SGST'),t.totalTax,t.grand,i.paid||0,round2(t.grand-(i.paid||0))]);});
+  // Separate CGST/SGST (intra-state) and IGST (inter-state) columns so the sheet
+  // works for both tax structures without double-counting.
+  const rows=[['Invoice Number','Invoice Date','Customer Name','GSTIN','State','Sale Type','Grade','HSN/SAC','Vehicle','Qty (Cum)','Rate',
+    'Taxable Amount','CGST %','CGST Amount','SGST %','SGST Amount','IGST %','IGST Amount','Total Tax','Grand Total','Paid','Balance Due']];
+  let T={taxable:0,cgst:0,sgst:0,igst:0,tax:0,grand:0,paid:0,due:0};
+  DB.invoices.filter(i=>!customerId||i.customerId===customerId).slice().sort(cmpInvNo).forEach(i=>{const h=hydrate(i);const t=invTotals(i);
+    const saleType=t.noGst?'Domestic (No GST)':(t.interState?'Inter-State':'Intra-State');
+    const half=t.gstRate/2;
+    const cgstP=(!t.noGst&&!t.interState)?half:''; const sgstP=cgstP; const igstP=(!t.noGst&&t.interState)?t.gstRate:'';
+    const due=round2(t.grand-(i.paid||0));
+    T.taxable+=t.baseTaxable;T.cgst+=t.cgst;T.sgst+=t.sgst;T.igst+=t.igst;T.tax+=t.totalTax;T.grand+=t.grand;T.paid+=(i.paid||0);T.due+=due;
+    rows.push([i.no,i.date,h.buyerName,h.buyerGstin||'',h.buyerState,saleType,h.gradeName,h.hsn,h.vehicle,i.qty,i.rate,
+      t.baseTaxable, cgstP, t.cgst||'', sgstP, t.sgst||'', igstP, t.igst||'', t.totalTax, t.grand, i.paid||0, due]);});
   if(rows.length===1) return toast('No invoices for this customer','err');
+  rows.push(['','','','','','TOTAL','','','','','',round2(T.taxable),'',round2(T.cgst),'',round2(T.sgst),'',round2(T.igst),round2(T.tax),round2(T.grand),round2(T.paid),round2(T.due)]);
   const nm = customerId ? 'DNK_Invoices_'+(customer(customerId).name||'').replace(/[^A-Za-z0-9]+/g,'_') : 'DNK_Invoices_All';
   downloadCSV(nm+'_'+todayISO()+'.csv',rows);
 }
 /* Customer-wise TOLL REGISTER — running dispatch ledger (matches the toll-project format) */
 function tollRows(customerId){
-  const invs=DB.invoices.filter(i=>i.customerId===customerId).slice().sort((a,b)=>(a.date+a.no).localeCompare(b.date+b.no));
+  const invs=DB.invoices.filter(i=>i.customerId===customerId).slice().sort(cmpByDateThenNo);
   let running=0;
   return invs.map(i=>{const h=hydrate(i);const t=invTotals(i);running=round2(running+t.grand);
     return {date:i.date,name:h.buyerName,grade:h.gradeName,load:i.qty,rate:i.rate,basic:t.taxable,gst:t.totalTax,final:t.grand,running,vehicle:h.vehicle||'',invoice:i.no};});
@@ -1118,7 +1188,7 @@ function printStatement(customerId){
   const paid=DB.invoices.filter(i=>i.customerId===customerId).reduce((s,i)=>s+(i.paid||0),0);
   const co=DB.company;
   const html=`<!doctype html><html><head><meta charset="utf-8"><title>Statement — ${esc(c.name)}</title>
-    <style>body{font-family:"Segoe UI",Arial,sans-serif;color:#111;font-size:12px;padding:16px}
+    <style>@page{size:A4;margin:0}body{font-family:"Segoe UI",Arial,sans-serif;color:#111;font-size:12px;padding:12mm;margin:0}
     h2{margin:0}.muted{color:#666}table{border-collapse:collapse;width:100%;margin-top:10px}
     td,th{border:1px solid #999;padding:4px 6px}.r{text-align:right}th{background:#f0f0f0}
     .head{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #14508c;padding-bottom:8px}
@@ -1143,6 +1213,144 @@ function exportMonthlyCSV(){
   const rows=[['Month','Bills','Total Cum','Taxable','GST','Grand Total']];
   Object.keys(byMonth).sort().forEach(m=>{const d=byMonth[m];rows.push([monthName(m),d.count,d.cum.toFixed(2),d.taxable,d.tax,d.grand]);});
   downloadCSV('DNK_Monthly_'+todayISO()+'.csv',rows);
+}
+
+/* ================= DATA IMPORT (CSV / Excel) =================
+   Bulk-import historical data. Records referenced by name (customers, vendors,
+   grades, vehicles) are matched case-insensitively and auto-created if missing;
+   invoices auto-compute GST from the customer's GSTIN & state code. */
+function findByName(list,key,name){ name=normKey(name); return (list||[]).find(x=>normKey(x[key])===name); }
+function ensureCustomer(name,gstin,stateCode){
+  name=String(name||'').trim(); if(!name) return null;
+  let c=findByName(DB.customers,'name',name);
+  gstin=(gstin||'').toUpperCase().trim();
+  if(!c){ c={id:uid('c'),name,gstin,state:'',stateCode:(stateCode||gstin.slice(0,2)||'').trim(),address:'',phone:''}; DB.customers.push(c); }
+  else { if(gstin&&!c.gstin) c.gstin=gstin; if(!c.stateCode) c.stateCode=(stateCode||gstin.slice(0,2)||'').trim(); }
+  return c;
+}
+function ensureVendor(name){ name=String(name||'').trim(); if(!name) return null; let v=findByName(DB.vendors,'name',name); if(!v){ v={id:uid('vn'),name,gstin:'',phone:'',material:'',address:''}; (DB.vendors=DB.vendors||[]).push(v); } return v; }
+function ensureGrade(name){ name=String(name||'').trim(); if(!name) return null; let g=findByName(DB.grades,'name',name); if(!g){ g={id:uid('g'),name,hsn:'38245010',gst:18,mix:{...DEFAULT_MIX}}; DB.grades.push(g); } return g; }
+function ensureVehicle(no){ no=String(no||'').trim().toUpperCase(); if(!no) return null; let v=findByName(DB.vehicles,'number',no); if(!v){ v={id:uid('v'),number:no,driver:'',driverPhone:'',capacity:''}; DB.vehicles.push(v); } return v; }
+function impNum(v){ const n=parseFloat(String(v==null?'':v).replace(/[^0-9.\-]/g,'')); return isNaN(n)?0:n; }
+function impDate(v){
+  if(v==null||v==='') return '';
+  const localISO=d=>{ if(isNaN(d)) return ''; return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); };
+  if(v instanceof Date) return localISO(v);
+  const s=String(v).trim();
+  if(/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0,10);
+  let m=/^(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})$/.exec(s);           // YYYY/MM/DD
+  if(m) return m[1]+'-'+String(m[2]).padStart(2,'0')+'-'+String(m[3]).padStart(2,'0');
+  m=/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/.exec(s);            // DD/MM/YYYY (Indian)
+  if(m){ let y=m[3]; if(y.length===2)y='20'+y; return y+'-'+String(m[2]).padStart(2,'0')+'-'+String(m[1]).padStart(2,'0'); }
+  if(/^\d+(\.\d+)?$/.test(s)){ const dt=new Date(Date.UTC(1899,11,30)+parseFloat(s)*86400000); return isNaN(dt)?'':dt.toISOString().slice(0,10); } // Excel serial
+  return localISO(new Date(s));
+}
+function impPhone(v){ return String(v==null?'':v).replace(/\D/g,'').slice(0,10); }
+const IMPORT_SPECS={
+  invoices:{label:'Invoices / Sales',headers:['Invoice Number','Date','Customer Name','Customer GSTIN','State Code','Grade','Qty','Rate','Pump Charges','Apply GST on Pump','Vehicle No'],
+    example:['DNK/1759','2026-07-07','S&A Infra','24AEBFS2259C1ZE','24','M-25','8','4750','0','No','AP39WQ0715'],
+    add(r,rep){ const date=impDate(r['Date']),cname=String(r['Customer Name']||'').trim(),gname=String(r['Grade']||'').trim();
+      if(!date||!cname||!gname){rep.skip++;return;}
+      const c=ensureCustomer(cname,r['Customer GSTIN'],r['State Code']),g=ensureGrade(gname);
+      const veh=String(r['Vehicle No']||'').trim()?ensureVehicle(r['Vehicle No']):null;
+      let no=String(r['Invoice Number']||'').trim(); if(!no){ no='DNK/'+((DB.seq||0)+1+rep.autoAdded); rep.autoAdded++; }
+      if(DB.invoices.some(x=>x.no===no)){rep.dup++;return;}
+      DB.invoices.push({id:uid('i'),no,date,customerId:c.id,siteId:'',gradeId:g.id,vehicleId:veh?veh.id:'',qty:impNum(r['Qty']),rate:impNum(r['Rate']),unit:'Cum',pump:impNum(r['Pump Charges']),pumpGst:/^(y|yes|true|1)$/i.test(String(r['Apply GST on Pump']||'').trim()),terms:'Immediate',dispatchThrough:'Transit Mixer',paid:0,createdAt:date,at:nowStamp()}); rep.ok++;
+    }},
+  customers:{label:'Customers',headers:['Name','GSTIN','State','State Code','Address','Phone'],
+    example:['ABC Constructions','29AAQFN9165M1Z6','Karnataka','29','Bengaluru','9848012345'],
+    add(r,rep){ const name=String(r['Name']||'').trim(); if(!name){rep.skip++;return;} if(findByName(DB.customers,'name',name)){rep.dup++;return;}
+      const gstin=String(r['GSTIN']||'').toUpperCase().trim();
+      DB.customers.push({id:uid('c'),name,gstin,state:String(r['State']||'').trim(),stateCode:String(r['State Code']||gstin.slice(0,2)||'').trim(),address:String(r['Address']||'').trim(),phone:impPhone(r['Phone'])}); rep.ok++;
+    }},
+  vendors:{label:'Vendors',headers:['Name','GSTIN','Phone','Material','Address'],
+    example:['AMAN Aggregates','','9848012345','20MM / 12MM','V.Kota'],
+    add(r,rep){ const name=String(r['Name']||'').trim(); if(!name){rep.skip++;return;} if(findByName(DB.vendors,'name',name)){rep.dup++;return;}
+      (DB.vendors=DB.vendors||[]).push({id:uid('vn'),name,gstin:String(r['GSTIN']||'').toUpperCase().trim(),phone:impPhone(r['Phone']),material:String(r['Material']||'').trim(),address:String(r['Address']||'').trim()}); rep.ok++;
+    }},
+  materials:{label:'Materials Received',headers:['Date','Material','Qty','Supplier','Vehicle No','Rate','Amount','Paid','Remarks'],
+    example:['2026-06-29','20MM','27.43','AMAN','9099','900','24687','24687',''],
+    add(r,rep){ const date=impDate(r['Date']),material=String(r['Material']||'').toUpperCase().trim(); if(!date||!material){rep.skip++;return;}
+      const v=ensureVendor(r['Supplier']),qty=impNum(r['Qty']),rate=impNum(r['Rate']),amount=impNum(r['Amount'])||round2(qty*rate);
+      (DB.materials=DB.materials||[]).push({id:uid('mt'),date,material,qty,vendorId:v?v.id:'',vehicleNo:String(r['Vehicle No']||'').toUpperCase().trim(),rate,amount,paid:impNum(r['Paid']),remarks:String(r['Remarks']||'').trim(),at:nowStamp()}); rep.ok++;
+    }},
+  vehiclelog:{label:'Vehicle Log',headers:['Vehicle No','Date','Previous Reading','Current Reading','Fuel Filled','Amount'],
+    example:['AP39WQ0715','2026-08-05','34010','34093','FULL','3000'],
+    add(r,rep){ const date=impDate(r['Date']),v=ensureVehicle(r['Vehicle No']); if(!date||!v){rep.skip++;return;}
+      (DB.vehicleLogs=DB.vehicleLogs||[]).push({id:uid('vl'),vehicleId:v.id,date,prev:impNum(r['Previous Reading']),curr:impNum(r['Current Reading']),fuel:String(r['Fuel Filled']||'').trim(),amount:impNum(r['Amount']),at:nowStamp()}); rep.ok++;
+    }},
+  staff:{label:'Staff',headers:['Name','Designation','Phone','Monthly Salary','Wage Per Day','Join Date','Paid Leave'],
+    example:['Ramesh K','Driver','9012345678','16900','650','2025-06-01','2'],
+    add(r,rep){ const name=String(r['Name']||'').trim(); if(!name){rep.skip++;return;}
+      DB.staff.push({id:uid('st'),name,role:String(r['Designation']||'').trim(),phone:impPhone(r['Phone']),monthlySalary:impNum(r['Monthly Salary']),wage:impNum(r['Wage Per Day']),joinDate:impDate(r['Join Date']),leaveAllowed:impNum(r['Paid Leave'])||2,active:true}); rep.ok++;
+    }},
+  products:{label:'Products (Inventory)',headers:['Name','Category','Unit','Opening Stock','Reorder Level','Rate'],
+    example:['Cement (OPC 53)','Cement','Bags','420','100','380'],
+    add(r,rep){ const name=String(r['Name']||'').trim(); if(!name){rep.skip++;return;}
+      DB.products.push({id:uid('p'),name,category:String(r['Category']||'').trim(),unit:String(r['Unit']||'').trim()||'Nos',stock:impNum(r['Opening Stock']),reorder:impNum(r['Reorder Level']),rate:impNum(r['Rate'])}); rep.ok++;
+    }},
+};
+let importModule='invoices';
+function importTemplate(){ const spec=IMPORT_SPECS[importModule]; if(spec) downloadCSV('DNK_Import_Template_'+importModule+'.csv',[spec.headers,spec.example||[]]); }
+function importHTML(){
+  const spec=IMPORT_SPECS[importModule];
+  return `<div class="card" style="margin-top:16px"><div class="hd"><h3>Import Data (CSV / Excel)</h3><span class="muted" style="font-size:12px">Bulk-import your history — April 2026 onward</span></div>
+    <div class="bd">
+      <div class="toolbar" style="margin:0">
+        <select id="imp_mod" onchange="importModule=this.value;renderSettings()" style="max-width:240px">
+          ${Object.keys(IMPORT_SPECS).map(k=>`<option value="${k}" ${importModule===k?'selected':''}>${IMPORT_SPECS[k].label}</option>`).join('')}
+        </select>
+        <button class="btn ghost" onclick="importTemplate()">⬇ Download Template</button>
+        ${window.XLSX?'<span class="pill paid">Excel supported</span>':'<span class="pill due">CSV only (offline)</span>'}
+      </div>
+      <div class="muted" style="font-size:11.5px;margin-top:10px">Columns for <b>${spec.label}</b>: ${spec.headers.map(h=>esc(h)).join(' • ')}</div>
+      <div class="field" style="margin-top:12px"><label>Upload filled CSV or Excel file</label><input type="file" id="imp_file" accept=".csv,.xlsx,.xls"></div>
+      <button class="btn green" style="margin-top:10px" onclick="importFile()">⬆ Import ${spec.label}</button>
+      <div id="imp_result" style="margin-top:12px"></div>
+      <div class="muted" style="font-size:11px;margin-top:10px">Download the template, fill it (keep the header row), then upload. Customers / vendors / grades / vehicles referenced by name are auto-created if missing. Invoices auto-compute GST from the customer's GSTIN &amp; state code. Duplicate invoice numbers &amp; existing customer/vendor names are skipped.</div>
+    </div></div>`;
+}
+/* RFC-4180-ish CSV parser (handles quotes, embedded commas & newlines) */
+function parseCSV(text){
+  const rows=[]; let field='',row=[],inQ=false; text=String(text).replace(/\r\n?/g,'\n');
+  for(let i=0;i<text.length;i++){ const ch=text[i];
+    if(inQ){ if(ch==='"'){ if(text[i+1]==='"'){field+='"';i++;} else inQ=false; } else field+=ch; }
+    else if(ch==='"') inQ=true;
+    else if(ch===','){ row.push(field); field=''; }
+    else if(ch==='\n'){ row.push(field); rows.push(row); row=[]; field=''; }
+    else field+=ch;
+  }
+  if(field!==''||row.length){ row.push(field); rows.push(row); }
+  return rows;
+}
+function importFile(){
+  if(!guardEdit())return;
+  const spec=IMPORT_SPECS[importModule], f=document.getElementById('imp_file').files[0];
+  if(!f) return toast('Choose a CSV or Excel file','err');
+  const ext=(f.name.split('.').pop()||'').toLowerCase();
+  if(ext==='xlsx'||ext==='xls'){
+    if(!window.XLSX) return toast('Excel reading needs internet — or Save As CSV and re-upload','err');
+    const rd=new FileReader(); rd.onload=e=>{ try{ const wb=window.XLSX.read(new Uint8Array(e.target.result),{type:'array',cellDates:true});
+      const ws=wb.Sheets[wb.SheetNames[0]]; runImport(spec,window.XLSX.utils.sheet_to_json(ws,{header:1,defval:'',raw:false})); }
+      catch(err){ toast('Could not read the Excel file','err'); } };
+    rd.readAsArrayBuffer(f);
+  } else {
+    const rd=new FileReader(); rd.onload=e=>{ try{ runImport(spec,parseCSV(e.target.result)); }catch(err){ toast('Could not read the CSV file','err'); } };
+    rd.readAsText(f);
+  }
+}
+function runImport(spec,rows){
+  rows=(rows||[]).filter(r=>Array.isArray(r)&&r.some(c=>String(c).trim()!==''));
+  if(rows.length<2) return toast('The file has a header but no data rows','err');
+  const header=rows[0].map(h=>String(h).trim());
+  const rep={ok:0,skip:0,dup:0,autoAdded:0};
+  for(let i=1;i<rows.length;i++){ const obj={}; header.forEach((h,idx)=>{obj[h]=rows[i][idx];}); try{ spec.add(obj,rep); }catch(e){ rep.skip++; } }
+  if(rep.ok){ recomputeSeq(); logAct('Data import',spec.label+' — '+rep.ok+' record(s)'); save(); }
+  const box=document.getElementById('imp_result');
+  if(box) box.innerHTML=`<div class="calc"><div class="row"><span>Imported</span><span style="color:var(--green)"><b>${rep.ok}</b> ${spec.label}</span></div>
+    <div class="row"><span>Skipped (missing key fields)</span><span>${rep.skip}</span></div>
+    <div class="row"><span>Duplicates ignored</span><span>${rep.dup}</span></div></div>`;
+  toast('Imported '+rep.ok+' record(s)', rep.ok?'ok':'err');
 }
 
 /* ---------------- Settings & Backup ---------------- */
@@ -1173,7 +1381,63 @@ function renderSettings(){
         <hr style="margin:18px 0;border:none;border-top:1px solid var(--line)">
         <button class="btn danger" style="width:100%;justify-content:center" onclick="resetDemo()">↺ Reset to Demo Data</button>
       </div></div>
-    </div>`+featureManageHTML();
+    </div>`+importHTML()+listManageHTML()+featureManageHTML();
+}
+/* Manage Lists & Options — Admin adds / renames / removes dropdown choices with no code. */
+function listManageHTML(){
+  const keys=Object.keys(DEFAULT_LISTS);
+  return `<div class="card" style="margin-top:16px"><div class="hd"><h3>Manage Lists &amp; Options</h3><span class="muted" style="font-size:12px">Add, rename or remove the choices used in dropdowns across the app — no coding, syncs to every device</span></div>
+    <div class="bd"><div class="grid" style="grid-template-columns:1fr 1fr;gap:16px;align-items:start">
+    ${keys.map(key=>{const items=optList(key);
+      return `<div style="border:1px solid var(--line);border-radius:10px;padding:12px">
+        <div style="font-weight:600;margin-bottom:10px">${esc(DEFAULT_LISTS[key].label)}</div>
+        <div id="list_${key}">
+          ${items.map((it,idx)=>`<div style="display:flex;gap:6px;margin-bottom:6px">
+            <input value="${esc(it)}" onchange="listRename('${key}',${idx},this)" style="flex:1;min-width:0">
+            <button class="btn ghost" title="Remove" onclick="listDel('${key}',${idx})" style="padding:6px 11px">✕</button>
+          </div>`).join('')}
+        </div>
+        <div style="display:flex;gap:6px;margin-top:8px">
+          <input id="listadd_${key}" placeholder="Add new option…" style="flex:1;min-width:0" onkeydown="if(event.key==='Enter'){event.preventDefault();listAdd('${key}');}">
+          <button class="btn" onclick="listAdd('${key}')" style="padding:6px 12px">+ Add</button>
+        </div>
+        <button class="btn ghost" onclick="listReset('${key}')" style="margin-top:8px;font-size:11px;padding:4px 10px">↺ Reset to default</button>
+      </div>`;}).join('')}
+    </div>
+    <div class="muted" style="font-size:11px;margin-top:12px">These options appear instantly in New Dispatch, Inventory, Materials Received and Leads. Existing records keep their saved value even if an option is later removed.</div>
+    </div></div>`;
+}
+function listAdd(key){
+  if(!guardEdit())return;
+  const el=document.getElementById('listadd_'+key); const v=(el.value||'').trim();
+  if(!v) return;
+  const cur=optList(key);
+  if(cur.some(x=>x.toLowerCase()===v.toLowerCase())) return toast('That option already exists','err');
+  cur.push(v); DB.lists=DB.lists||{}; DB.lists[key]=cur;
+  save(); logAct('Option added',DEFAULT_LISTS[key].label+': '+v); toast('Added','ok'); renderSettings();
+}
+function listDel(key,idx){
+  if(!guardEdit())return;
+  const cur=optList(key);
+  if(cur.length<=1) return toast('Keep at least one option','err');
+  if(!confirm('Remove "'+cur[idx]+'"?'))return;
+  const removed=cur.splice(idx,1)[0]; DB.lists=DB.lists||{}; DB.lists[key]=cur;
+  save(); logAct('Option removed',DEFAULT_LISTS[key].label+': '+removed); renderSettings();
+}
+function listRename(key,idx,elm){
+  if(!guardEdit()){ renderSettings(); return; }
+  const v=(elm.value||'').trim(); const cur=optList(key);
+  if(!v){ elm.value=cur[idx]; return; }
+  if(cur.some((x,i)=>i!==idx&&x.toLowerCase()===v.toLowerCase())){ toast('Duplicate option','err'); elm.value=cur[idx]; return; }
+  const old=cur[idx]; if(old===v) return;
+  cur[idx]=v; DB.lists=DB.lists||{}; DB.lists[key]=cur;
+  save(); logAct('Option renamed',DEFAULT_LISTS[key].label+': '+old+' → '+v);
+}
+function listReset(key){
+  if(!guardEdit())return;
+  if(!confirm('Reset "'+DEFAULT_LISTS[key].label+'" to its default options?'))return;
+  DB.lists=DB.lists||{}; delete DB.lists[key];
+  save(); logAct('List reset to default',DEFAULT_LISTS[key].label); renderSettings();
 }
 function featureManageHTML(){
   const items=Object.keys(PERM_LABELS).filter(k=>!CORE_FEATURES[k]);
@@ -1197,7 +1461,7 @@ function saveCompany(){
   const co=DB.company;
   const gst=val('co_gstin').toUpperCase();
   if(gst && !gstinValid(gst))return toast('Invalid GSTIN — format: 22AAAAA0000A1Z5','err');
-  if(!phoneOk(val('co_phone')))return toast('Phone must be up to 10 digits','err');
+  if(!phoneValid(val('co_phone')))return toast('Enter a valid 10-digit mobile number (starts 6-9)','err');
   co.name=val('co_name');co.gstin=gst;co.stateName=val('co_state');co.stateCode=val('co_scode');
   co.email=val('co_email');co.phone=val('co_phone');co.addressLines=val('co_addr').split('\n').filter(Boolean);
   co.bank.bank=val('co_bank');co.bank.acno=val('co_acno');co.bank.branch=val('co_branch');co.bank.ifsc=val('co_ifsc');co.bank.name=co.name;
@@ -1283,7 +1547,6 @@ function rvCalc(){
 }
 
 /* ---- Leads & Follow-up (CRM) ---- */
-const LEAD_STATUS=['New','Contacted','Quoted','Won','Lost'];
 function statusPill(s){ const map={New:'due',Contacted:'part',Quoted:'igst',Won:'paid',Lost:'nogst'}; return `<span class="pill ${map[s]||'due'}">${s}</span>`; }
 function renderLeads(){
   const leads=DB.leads||[];
@@ -1317,7 +1580,7 @@ function leadModal(id){
       <div class="field"><label>Source</label><input id="ld_source" value="${esc(l.source)}" placeholder="Reference / Website / Tender"></div>
       <div class="field full"><label>Requirement</label><input id="ld_req" value="${esc(l.requirement)}"></div>
       <div class="field"><label>Est. Value (₹)</label><input id="ld_value" type="number" value="${l.value||''}"></div>
-      <div class="field"><label>Status</label><select id="ld_status">${LEAD_STATUS.map(s=>`<option ${s===l.status?'selected':''}>${s}</option>`).join('')}</select></div>
+      <div class="field"><label>Status</label><select id="ld_status">${optList('leadStatus').map(s=>`<option ${s===l.status?'selected':''}>${esc(s)}</option>`).join('')}</select></div>
       <div class="field"><label>Next Follow-up</label><input id="ld_follow" type="date" value="${l.nextFollowup||''}"></div>
       <div class="field full"><label>Notes</label><textarea id="ld_notes" rows="2">${esc(l.notes)}</textarea></div>
    </div>`,
@@ -1326,7 +1589,7 @@ function leadModal(id){
 function saveLead(id){
   const o={name:val('ld_name'),contact:val('ld_contact'),phone:val('ld_phone'),source:val('ld_source'),requirement:val('ld_req'),value:+val('ld_value')||0,status:val('ld_status'),nextFollowup:val('ld_follow'),notes:val('ld_notes')};
   if(!o.name)return toast('Lead name required','err');
-  if(!phoneOk(o.phone))return toast('Phone must be up to 10 digits','err');
+  if(!phoneValid(o.phone))return toast('Enter a valid 10-digit mobile number (starts 6-9; not a repeated/sequential number)','err');
   DB.leads=DB.leads||[];
   if(id){Object.assign(DB.leads.find(x=>x.id===id),o);}else{DB.leads.push({id:uid('l'),...o});}
   save();closeModal();toast('Lead saved','ok');renderLeads();
@@ -1418,6 +1681,10 @@ function renderInventory(){
       <div class="kpi red"><div class="lab">Low Stock</div><div class="val">${low.length}</div><div class="sub">at / below reorder level</div></div>
       <div class="kpi green"><div class="lab">Stock Value</div><div class="val">₹${inr(value)}</div><div class="sub">at current rates</div></div>
     </div>
+    <div class="card" style="margin-bottom:14px;border-left:3px solid var(--brand)"><div class="bd" style="padding:12px 14px">
+      <div style="font-weight:600;margin-bottom:4px">How this module works</div>
+      <div class="muted" style="font-size:12px;line-height:1.6">Track raw materials (cement, aggregate, sand, admixture, fly ash). Set an <b>opening stock</b> when adding a product. Recording a <b>Purchase</b> (Vendors &amp; Purchases) with a linked product <b>adds to stock</b> automatically. Use <b>Stock Out</b> to record material consumed in batching. <b>Low-stock alerts</b> trigger at/below the reorder level. Stock is a manual register — invoices do <b>not</b> auto-deduct (mix quantities vary by site).</div>
+    </div></div>
     <div class="toolbar"><button class="btn ghost" onclick="exportInventoryCSV()">⬇ Inventory CSV</button></div>
     <div class="card" style="margin-bottom:16px"><div class="bd" style="padding:0" id="invTbl"></div></div>
     <div class="card"><div class="hd"><h3>Recent Stock Movements</h3></div><div class="bd" style="padding:0">${stockMoveTable()}</div></div>`;
@@ -1450,15 +1717,19 @@ function stockMoveTable(){
 }
 function prodModal(id){
   const p=id?product(id):{name:'',category:'Cement',unit:'Bags',stock:'',reorder:'',rate:''};
-  const cats=['Cement','Aggregate','Admixture','Fuel','Steel','Other'];
-  const units=['Bags','MT','Kg','Cft','Litre','Nos'];
-  const isCustom = !!p.category && !cats.includes(p.category);      // saved custom category
-  const selCat = isCustom ? 'Other' : (p.category||'Cement');
+  let cats=optList('productCategories');
+  let units=optList('productUnits');
+  const hasOther = cats.some(c=>c.toLowerCase()==='other');
+  const isCustom = !!p.category && !cats.includes(p.category) && hasOther; // saved custom category (only when an "Other" bucket exists)
+  // keep an existing record's saved value selectable even if the option was later removed
+  if(p.category && !cats.includes(p.category) && !isCustom) cats=[p.category].concat(cats);
+  if(p.unit && !units.includes(p.unit)) units=[p.unit].concat(units);
+  const selCat = isCustom ? 'Other' : (p.category||cats[0]||'');
   modal((id?'Edit':'Add')+' Product',
     `<div class="form-grid">
       <div class="field full"><label>Product Name *</label><input id="pr_name" value="${esc(p.name)}" placeholder="e.g. Cement (OPC 53 Grade)"></div>
-      <div class="field"><label>Category</label><select id="pr_cat" onchange="prCatToggle()">${cats.map(c=>`<option ${c===selCat?'selected':''}>${c}</option>`).join('')}</select></div>
-      <div class="field"><label>Unit</label><select id="pr_unit">${units.map(u=>`<option ${u===p.unit?'selected':''}>${u}</option>`).join('')}</select></div>
+      <div class="field"><label>Category</label><select id="pr_cat" onchange="prCatToggle()">${cats.map(c=>`<option ${c===selCat?'selected':''}>${esc(c)}</option>`).join('')}</select></div>
+      <div class="field"><label>Unit</label><select id="pr_unit">${units.map(u=>`<option ${u===p.unit?'selected':''}>${esc(u)}</option>`).join('')}</select></div>
       <div class="field full" id="pr_catother_wrap" style="display:${selCat==='Other'?'block':'none'}"><label>Specify Category *</label><input id="pr_catother" value="${isCustom?p.category:''}" placeholder="e.g. Diesel, GGBS, Water"></div>
       <div class="field"><label>${id?'Current':'Opening'} Stock</label><input id="pr_stock" type="number" step="0.01" value="${p.stock!==''?p.stock:''}"></div>
       <div class="field"><label>Reorder Level</label><input id="pr_reorder" type="number" step="0.01" value="${p.reorder!==''?p.reorder:''}"></div>
@@ -1599,7 +1870,7 @@ function saveStaff(id){
   const o={name:val('sf_name'),role:val('sf_role'),phone:val('sf_phone'),wage:Number(val('sf_wage'))||0,
     monthlySalary:Number(val('sf_msal'))||0,joinDate:val('sf_join'),leaveAllowed:Number(val('sf_leave'))||0,active:val('sf_active')==='1'};
   if(!o.name)return toast('Name required','err');
-  if(!phoneOk(o.phone))return toast('Phone must be up to 10 digits','err');
+  if(!phoneValid(o.phone))return toast('Enter a valid 10-digit mobile number (starts 6-9; not a repeated/sequential number)','err');
   if(id){ Object.assign(staffById(id),o); } else { DB.staff.push({id:uid('st'),...o}); }
   save(); closeModal(); toast('Staff saved','ok'); renderStaff();
 }
@@ -1623,7 +1894,10 @@ function computePay(s,ym){
   const P=attCount(s.id,ym,'P'),A=attCount(s.id,ym,'A'),H=attCount(s.id,ym,'H'),L=attCount(s.id,ym,'L');
   const gross=+s.monthlySalary||0;
   const allowed=+s.leaveAllowed||0;
-  const lopDays=round2(Math.max(0,(A+L)-allowed)+H*0.5);   // unpaid days beyond eligible leave (+ half-days)
+  // Business rule: ABSENT is always unpaid (Loss of Pay). LEAVE is paid up to the
+  // monthly paid-leave allowance; only leave beyond the allowance becomes LOP.
+  // Half-days count as half a LOP day.
+  const lopDays=round2(A + Math.max(0,L-allowed) + H*0.5);
   const perDay=round2(gross/30);                            // 30-day salary basis
   const lop=round2(perDay*lopDays);
   const adv=advTotal(s.id,ym);
@@ -1696,7 +1970,10 @@ function saveAdvance(id){
   DB.advances=DB.advances||[];
   DB.advances.push({id:uid('ad'),staffId:id,date:val('av_date')||todayISO(),amount:amt,note:val('av_note'),at:nowStamp()});
   logAct('Salary advance',(staffById(id).name||'')+' — ₹'+inr(amt));
-  save(); toast('Advance recorded','ok');
+  save();
+  const st=staffById(id); const totAdv=advTotal(id,payMonth); const gross=+st.monthlySalary||0;
+  if(gross && totAdv>gross){ toast('Note: advances (₹'+inr(totAdv)+') now exceed monthly salary — extra will carry forward','err'); }
+  else { toast('Advance recorded','ok'); }
   document.getElementById('av_list').innerHTML=advListHTML(id);
   const d=document.getElementById('av_amt'); if(d){d.value='';}
 }
@@ -1721,7 +1998,7 @@ function processSalary(id){
 function printPayslip(id){
   const s=staffById(id); const ym=payMonth; const c=computePay(s,ym); const co=DB.company;
   const html=`<!doctype html><html><head><meta charset="utf-8"><title>Payslip — ${esc(s.name)} ${ym}</title>
-    <style>body{font-family:"Segoe UI",Arial,sans-serif;color:#111;font-size:12px;padding:18px}
+    <style>@page{size:A4;margin:0}body{font-family:"Segoe UI",Arial,sans-serif;color:#111;font-size:12px;padding:12mm;margin:0}
     h2{margin:0}.muted{color:#666}table{border-collapse:collapse;width:100%;margin-top:10px}
     td,th{border:1px solid #999;padding:5px 8px}.r{text-align:right}th{background:#f0f0f0;text-align:left}
     .head{display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #14508c;padding-bottom:8px}
@@ -1755,6 +2032,7 @@ function exportPayrollCSV(){
 }
 
 /* ================= VENDORS & PURCHASES ================= */
+let purFrom='', purTo='';
 function vendor(id){ return (DB.vendors||[]).find(v=>v.id===id)||{}; }
 function purchasesFor(vid){ return (DB.purchases||[]).filter(p=>p.vendorId===vid); }
 function renderVendors(){
@@ -1771,7 +2049,12 @@ function renderVendors(){
       <div class="kpi red"><div class="lab">Payable to Vendors</div><div class="val">₹${inr(totDue)}</div></div>
     </div>
     <div class="toolbar"><button class="btn ghost" onclick="exportVendorsCSV()">⬇ Vendors CSV</button>
-      <button class="btn ghost" onclick="exportPurchasesCSV()">⬇ Purchases CSV</button></div>
+      <button class="btn ghost" onclick="exportPurchasesCSV()">⬇ Purchases CSV</button>
+      <label style="font-size:12px;color:var(--muted)">From</label>
+      <input type="date" id="purFrom" value="${purFrom}" onchange="purFrom=this.value;drawPurchases()" style="max-width:150px">
+      <label style="font-size:12px;color:var(--muted)">To</label>
+      <input type="date" id="purTo" value="${purTo}" onchange="purTo=this.value;drawPurchases()" style="max-width:150px">
+      ${(purFrom||purTo)?`<button class="btn ghost sm" onclick="purFrom='';purTo='';renderVendors()">✕ Clear dates</button>`:''}</div>
     <div class="card" style="margin-bottom:16px"><div class="hd"><h3>Vendors</h3></div><div class="bd" style="padding:0">
       ${vends.length?`<table class="table"><thead><tr><th>Vendor</th><th>Material</th><th>GSTIN</th><th>Phone</th><th class="num">Purchases</th><th class="num">Value</th><th class="right"></th></tr></thead><tbody>`+
       vends.map(v=>{const ps=purchasesFor(v.id);const val=ps.reduce((s,p)=>s+(+p.amount||0),0);
@@ -1784,7 +2067,9 @@ function renderVendors(){
   drawPurchases();
 }
 function drawPurchases(){
-  const purch=[...(DB.purchases||[])].sort((a,b)=>(b.date+(b.at||'')).localeCompare(a.date+(a.at||'')));
+  const purch=[...(DB.purchases||[])]
+    .filter(p=>(!purFrom||(p.date||'')>=purFrom) && (!purTo||(p.date||'')<=purTo))
+    .sort((a,b)=>(b.date+(b.at||'')).localeCompare(a.date+(a.at||'')));
   document.getElementById('purchTbl').innerHTML = purch.length?
     `<table class="table"><thead><tr><th>Date / Time</th><th>Vendor</th><th>Material</th><th class="num">Qty</th><th class="num">Rate</th><th class="num">Amount</th><th class="num">Paid</th><th class="num">Due</th><th>Bill No</th><th class="right">Actions</th></tr></thead><tbody>`+
     purch.map(p=>{const v=vendor(p.vendorId);const pr=product(p.productId);const due=round2((+p.amount||0)-(+p.paid||0));
@@ -1812,7 +2097,7 @@ function saveVendor(id){
   const o={name:val('vn_name'),material:val('vn_mat'),gstin:val('vn_gstin').toUpperCase(),phone:val('vn_phone'),address:val('vn_addr')};
   if(!o.name)return toast('Vendor name required','err');
   if(o.gstin && !gstinValid(o.gstin))return toast('Invalid GSTIN — format: 22AAAAA0000A1Z5','err');
-  if(!phoneOk(o.phone))return toast('Phone must be up to 10 digits','err');
+  if(!phoneValid(o.phone))return toast('Enter a valid 10-digit mobile number (starts 6-9; not a repeated/sequential number)','err');
   DB.vendors=DB.vendors||[];
   if(id){Object.assign(vendor(id),o);}else{DB.vendors.push({id:uid('vn'),...o});}
   logAct(id?'Vendor updated':'Vendor added',o.name);
@@ -1894,7 +2179,6 @@ function exportPurchasesCSV(){
 }
 
 /* ================= MATERIALS RECEIVED (raw-material inflow register) ================= */
-const MATERIAL_TYPES=['12MM','20MM','10MM','DUST','M SAND','FLYASH','CEMENT','CEMENT LOOSE','ADMIXTURE','PLASTICISER','OTHER'];
 let matMonth=todayISO().slice(0,7), matVendor='';
 function renderMaterials(){
   matMonth=matMonth||todayISO().slice(0,7);
@@ -1940,7 +2224,7 @@ function drawMaterials(){
 function materialModal(id){
   const m=id?(DB.materials||[]).find(x=>x.id===id):{date:todayISO(),material:'',qty:'',vendorId:'',vehicleNo:'',rate:'',paid:'',remarks:''};
   const vopts=(DB.vendors||[]).map(v=>`<option value="${v.id}" ${v.id===m.vendorId?'selected':''}>${esc(v.name)}</option>`).join('');
-  const mopts=MATERIAL_TYPES.map(t=>`<option value="${t}"></option>`).join('');
+  const mopts=optList('materialTypes').map(t=>`<option value="${esc(t)}"></option>`).join('');
   modal((id?'Edit':'Record')+' Material Received',
     `<div class="form-grid">
       <div class="field"><label>Date</label><input id="ma_date" type="date" value="${m.date||todayISO()}" max="${todayISO()}"></div>
@@ -2005,7 +2289,7 @@ function printMaterialSummary(){
     });
   });
   const html=`<!doctype html><html><head><meta charset="utf-8"><title>Materials Received — ${monthName(matMonth)}</title>
-    <style>body{font-family:"Segoe UI",Arial,sans-serif;color:#111;font-size:12px;padding:16px}
+    <style>@page{size:A4;margin:0}body{font-family:"Segoe UI",Arial,sans-serif;color:#111;font-size:12px;padding:12mm;margin:0}
     h2{margin:0}.muted{color:#666}table{border-collapse:collapse;width:100%;margin-top:4px}
     td,th{border:1px solid #999;padding:4px 7px}.r{text-align:right}th{background:#f0f0f0;text-align:left}
     .tot{font-weight:700;background:#f7f7f7}
@@ -2171,7 +2455,7 @@ function doExportZip(){
     if(from&&i.date<from)return false;
     if(to&&i.date>to)return false;
     return true;
-  }).sort((a,b)=>a.no.localeCompare(b.no));
+  }).sort(cmpInvNo);
   if(!list.length)return toast('No invoices match the selection','err');
   const files=list.map(i=>({name:safeName(i.no)+'_'+safeName(customer(i.customerId).name)+'.html',data:invoiceHTML(hydrate(i),DB.company)}));
   const bytes=makeZip(files);
