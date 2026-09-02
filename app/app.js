@@ -1396,13 +1396,21 @@ function runImport(spec,rows){
    styles never clash with the app. Content is bundled at build time (MANUAL_HTML). */
 function renderManual(){
   document.getElementById('main').innerHTML=topbar('App Manual','Complete user guide &amp; feature documentation',
-    `<button class="btn ghost" onclick="manualPrint()">🖨 Save as PDF</button>`)+
+    `<button class="btn ghost" onclick="manualOpen()">↗ Open full page</button>
+     <button class="btn ghost" onclick="manualPrint()">🖨 Save as PDF</button>`)+
     `<div class="card" style="padding:0;overflow:hidden">
        <iframe id="manualFrame" title="DNK RMC App Manual" style="width:100%;height:calc(100vh - 172px);min-height:520px;border:0;display:block;background:#fff"></iframe>
      </div>`;
   const f=document.getElementById('manualFrame');
   if(f){ if(window.MANUAL_HTML) f.srcdoc=window.MANUAL_HTML;
     else f.srcdoc='<p style="font-family:sans-serif;padding:24px">Manual not available in this build.</p>'; }
+}
+function manualBlobURL(){
+  try{ return URL.createObjectURL(new Blob([window.MANUAL_HTML||''],{type:'text/html'})); }catch(e){ return ''; }
+}
+function manualOpen(){
+  const u=manualBlobURL(); if(u) window.open(u,'_blank');
+  else toast('Manual not available','err');
 }
 function manualPrint(){
   const f=document.getElementById('manualFrame');

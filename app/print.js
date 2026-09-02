@@ -100,7 +100,10 @@ function invoiceHTML(inv, company, opts){
     .small{font-size:10px}
     .items th{background:#f2f2f2;text-align:center;font-size:10px;vertical-align:middle}
     .items td{vertical-align:middle}
-    .items .desc{min-height:150px;vertical-align:top}
+    /* GST charge lines shown as their own rows, entirely bold */
+    .items .gst-line td{font-weight:700}
+    .items .desc{vertical-align:top}
+    .items td{padding-top:8px;padding-bottom:8px}
     .words{padding:4px 6px;font-weight:700}
     .bank td{border:none;padding:1px 5px}
     .sign{height:70px}
@@ -146,11 +149,9 @@ function invoiceHTML(inv, company, opts){
       <tr><th style="width:26px">Sl</th><th>Description of Goods</th><th style="width:70px">HSN/SAC</th><th style="width:50px">GST Rate</th><th style="width:70px">Quantity</th><th style="width:70px">Rate</th><th style="width:40px">per</th><th style="width:80px">Amount</th></tr>
       <tr>
         <td class="c">1</td>
-        <td class="desc"><b>Ready Mix Concrete Grade (GST) ${esc(inv.gradeName)}</b>
-          <div style="margin-top:8px">${taxTable(c,inv)}</div>
-        </td>
+        <td class="desc"><b>Ready Mix Concrete Grade (GST) ${esc(inv.gradeName)}</b></td>
         <td class="c">${esc(inv.hsn)}</td>
-        <td class="c">${c.noGst?'—':c.gstRate+'%'}</td>
+        <td class="c">${c.noGst?'—':''}</td>
         <td class="r">${inv.qty.toFixed(2)} ${esc(tcase(inv.unit))}</td>
         <td class="r">${inr(inv.rate)}</td>
         <td class="c">${esc(tcase(inv.unit))}</td>
@@ -160,12 +161,16 @@ function invoiceHTML(inv, company, opts){
         <td class="c">2</td>
         <td class="desc" style="min-height:0"><b>Concrete Pumping Charges</b>${c.pumpGst?'':' <span class="small">(GST not applicable)</span>'}</td>
         <td class="c">995469</td>
-        <td class="c">${c.pumpGst?c.gstRate+'%':'—'}</td>
+        <td class="c">—</td>
         <td class="r">—</td>
         <td class="r">${inr(c.pump)}</td>
         <td class="c">Job</td>
         <td class="r b">${inr(c.pump)}</td>
       </tr>`:''}
+      ${c.noGst?'':(c.interState
+        ? `<tr class="gst-line"><td class="c"></td><td>Output IGST</td><td class="c"></td><td class="c">${c.gstRate}%</td><td class="r"></td><td class="r"></td><td class="c"></td><td class="r">${inr(c.igst)}</td></tr>`
+        : `<tr class="gst-line"><td class="c"></td><td>Output CGST</td><td class="c"></td><td class="c">${c.gstRate/2}%</td><td class="r"></td><td class="r"></td><td class="c"></td><td class="r">${inr(c.cgst)}</td></tr>
+           <tr class="gst-line"><td class="c"></td><td>Output SGST</td><td class="c"></td><td class="c">${c.gstRate/2}%</td><td class="r"></td><td class="r"></td><td class="c"></td><td class="r">${inr(c.sgst)}</td></tr>`)}
       <tr><td colspan="4" class="r b">Total</td><td class="r b">${inv.qty.toFixed(2)} ${esc(tcase(inv.unit))}</td><td colspan="2"></td><td class="r b">₹ ${inr(c.grand)}</td></tr>
     </table>
     <div class="words">Amount Chargeable (in words):&nbsp; ${numToWords(c.grand)} <span style="float:right;font-weight:400">E. &amp; O.E</span></div>
