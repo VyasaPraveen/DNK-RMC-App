@@ -648,10 +648,10 @@ function renderNewInvoice(editId){
           <div class="field"><label>Vehicle &amp; Driver</label>
             <select id="f_veh"><option value="">— Select Vehicle —</option>
             ${DB.vehicles.map(v=>`<option value="${v.id}" ${v.id===form.vehicleId?'selected':''}>${esc(v.number)} — ${esc(v.driver)}</option>`).join('')}</select></div>
-          <div class="field"><label>Quantity (Cum) *</label>
-            <input id="f_qty" type="number" step="0.01" value="${form.qty||''}" placeholder="e.g. 6.50" oninput="onCalc()"></div>
+          <div class="field"><label>Quantity (Cum) <span id="f_qty_req" style="display:${isPumpGrade(form.gradeId)?'none':'inline'}">*</span></label>
+            <input id="f_qty" type="number" step="0.01" value="${form.qty||''}" placeholder="${isPumpGrade(form.gradeId)?'optional for Pump':'e.g. 6.50'}" oninput="onCalc()"></div>
           <div class="field"><label>Rate per Cum (₹)</label>
-            <input id="f_rate" type="number" step="0.01" value="${form.rate||''}" placeholder="auto from Rate Master" oninput="onCalc()"></div>
+            <input id="f_rate" type="number" step="0.01" value="${form.rate||''}" placeholder="${isPumpGrade(form.gradeId)?'optional for Pump':'auto from Rate Master'}" oninput="onCalc()"></div>
           <div class="field"><label>Pump Charges (₹)</label>
             <input id="f_pump" type="number" step="0.01" value="${form.pump||''}" placeholder="0.00 (optional)" oninput="onCalc()"></div>
           <div class="field"><label>GST on Pump</label>
@@ -685,7 +685,16 @@ function onCust(cid){
   if(noEl){ noEl.readOnly=!unreg; if(!unreg) noEl.value = form.editId ? form.no : 'DNK/'+(DB.seq+1); }
   autoRate(); onCalc();
 }
-function onGrade(){ autoRate(); onCalc(); }
+/* A "PUMP" grade is a pump-only service line — Quantity & Rate are optional for it. */
+function isPumpGrade(gid){ return (grade(gid).name||'').trim().toUpperCase()==='PUMP'; }
+function syncQtyReq(){
+  const gid=document.getElementById('f_grade'); if(!gid) return;
+  const pump=isPumpGrade(gid.value);
+  const star=document.getElementById('f_qty_req'); if(star) star.style.display=pump?'none':'inline';
+  const q=document.getElementById('f_qty'); if(q) q.placeholder=pump?'optional for Pump':'e.g. 6.50';
+  const r=document.getElementById('f_rate'); if(r) r.placeholder=pump?'optional for Pump':'auto from Rate Master';
+}
+function onGrade(){ autoRate(); onCalc(); syncQtyReq(); }
 function autoRate(){
   const cid=document.getElementById('f_cust').value, gid=document.getElementById('f_grade').value;
   if(cid&&gid){ const r=rateFor(cid,gid); if(r){ document.getElementById('f_rate').value=r; } }
@@ -736,8 +745,14 @@ function saveInvoice(){
   readForm();
   if(!form.customerId){ return toast('Select a customer','err'); }
   if(!form.gradeId){ return toast('Select a concrete grade','err'); }
-  if(!form.qty||form.qty<=0){ return toast('Enter quantity','err'); }
-  if(!form.rate||form.rate<=0){ return toast('Enter rate','err'); }
+  const pumpGrade=isPumpGrade(form.gradeId);
+  if(!pumpGrade){
+    if(!form.qty||form.qty<=0){ return toast('Enter quantity','err'); }
+    if(!form.rate||form.rate<=0){ return toast('Enter rate','err'); }
+  } else if((!form.qty||form.qty<=0)&&(!form.rate||form.rate<=0)&&(!form.pump||form.pump<=0)){
+    // pump-only bill still needs a value somewhere
+    return toast('Enter pump charges (or quantity & rate)','err');
+  }
   const c=customer(form.customerId);
   const unreg = !(c.gstin && c.gstin.trim());
   const autoNo='DNK/'+(DB.seq+1);
