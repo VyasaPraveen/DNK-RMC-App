@@ -236,6 +236,13 @@ function load(){
 function migrate(d){
   const s=seed();
   ['grades','customers','sites','vehicles','rates','invoices','payments','users','leads','products','stockmoves','staff','attendance','advances','salaryRecords','vendors','purchases','materials','vehicleLogs','activity'].forEach(k=>{ if(!Array.isArray(d[k])) d[k]=s[k]; });
+  // SECURITY: the shared cloud doc is writable by any signed-in (even anonymous)
+  // client, so every record id is untrusted. Real ids are only ever [a-z0-9] (uid()
+  // / seed), so stripping other characters is a no-op for genuine data while it
+  // neutralises any id crafted to break out of an inline onclick="fn('<id>')" handler.
+  ['grades','customers','sites','vehicles','rates','invoices','payments','users','leads','products','stockmoves','staff','attendance','advances','salaryRecords','vendors','purchases','materials','vehicleLogs'].forEach(k=>{
+    (d[k]||[]).forEach(it=>{ if(it&&it.id!=null) it.id=String(it.id).replace(/[^A-Za-z0-9_-]/g,''); });
+  });
   if(!d.company) d.company=s.company;
   if(d.seq==null) d.seq=s.seq;
   // backfill grade mix designs
@@ -365,6 +372,13 @@ function go(route){
   } else {
     renderApp();
   }
+  toggleNav(false);           // close the mobile drawer after navigating
+}
+/* Mobile slide-in navigation drawer. force=true opens, false closes, omitted toggles. */
+function toggleNav(force){
+  const app=document.getElementById('appRoot'); if(!app) return;
+  const open = force===undefined ? !app.classList.contains('nav-open') : !!force;
+  app.classList.toggle('nav-open', open);
 }
 
 /* ---------------- Auth & session user ---------------- */
@@ -486,7 +500,7 @@ function forgotSecurity(u){
   if(!u.secQ||!u.secA) return toast('No security question set — ask your admin to reset it','err');
   closeModal();
   modal('Reset Password — '+u.name,
-    `<div class="field"><label>Security Question</label><div class="static-field">${u.secQ}</div></div>
+    `<div class="field"><label>Security Question</label><div class="static-field">${esc(u.secQ)}</div></div>
      <div class="field" style="margin-top:12px"><label>Your Answer *</label><input id="fg_ans" placeholder="Your answer"></div>
      <div class="field" style="margin-top:12px"><label>New Password *</label>
        <div class="pwd-wrap"><input id="fg_new" type="password" placeholder="At least 4 characters"><button type="button" class="pwd-eye" onclick="togglePwd('fg_new',this)" tabindex="-1">👁</button></div></div>
@@ -549,7 +563,9 @@ function renderApp(){
       `<a data-r="${i.r}" class="${current===i.r?'active':''}" onclick="go('${i.r}')"><span class="ic">${i.ic}</span><span class="nt">${i.t}</span></a>`).join('');
   }).join('');
   document.getElementById('root').innerHTML=`
-  <div class="app">
+  <div class="app" id="appRoot">
+    <button class="burger" aria-label="Menu" onclick="toggleNav()">☰</button>
+    <div class="nav-scrim" onclick="toggleNav(false)"></div>
     <div class="sidebar">
       <div class="brand"><img src="${window.LOGO_DATA}"><div><div class="bt">DNK POWER CONMIX</div><div class="bs">RMC BILLING SYSTEM</div></div></div>
       <div class="nav">${nav}</div>
@@ -583,11 +599,11 @@ function renderDashboard(){
   const recent=[...invs].sort((a,b)=>cmpByDateThenNo(b,a)).slice(0,10);
 
   const dispatchRows = recent.length ? recent.map(i=>
-     `<div class="dashrow"><div class="r-l">${fmtDate(i.date)} <span class="r-sub">${i.no}</span></div>
+     `<div class="dashrow"><div class="r-l">${fmtDate(i.date)} <span class="r-sub">${esc(i.no)}</span></div>
         <div class="r-r"><span class="r-q">${i.qty} m³</span>₹${inr(invTotals(i).grand)}</div></div>`).join('')
      : `<div class="empty">No dispatches yet.</div>`;
   const invoiceRows = recent.length ? recent.map(i=>
-     `<div class="dashrow"><a class="r-l" onclick="printInvoice('${i.id}')">${i.no} <span class="r-sub">${fmtDate(i.date)}</span></a>
+     `<div class="dashrow"><a class="r-l" onclick="printInvoice('${i.id}')">${esc(i.no)} <span class="r-sub">${fmtDate(i.date)}</span></a>
         <div class="r-r">₹${inr(invTotals(i).grand)}</div></div>`).join('')
      : `<div class="empty">No invoices yet.</div>`;
 
@@ -666,7 +682,7 @@ function renderNewInvoice(editId){
           <div class="field"><label>Dispatched Through</label>
             <select id="f_dispatch">${optListWith('dispatchThrough',form.dispatchThrough).map(o=>`<option ${o===form.dispatchThrough?'selected':''}>${esc(o)}</option>`).join('')}</select></div>
           <div class="field"><label>Invoice Number ${unreg?'<span class="muted">(editable — unregistered buyer)</span>':''}</label>
-            <input id="f_no" value="${form.no||autoNo}" ${unreg?'':'readonly'} title="${unreg?'Editable for unregistered buyers':'Auto-numbered for registered buyers'}"></div>
+            <input id="f_no" value="${esc(form.no||autoNo)}" ${unreg?'':'readonly'} title="${unreg?'Editable for unregistered buyers':'Auto-numbered for registered buyers'}"></div>
         </div>
       </div></div>
       <div class="card"><div class="hd"><h3>Invoice Summary</h3></div><div class="bd">
@@ -996,10 +1012,10 @@ function vehModal(id){
   const v=id?vehicle(id):{number:'',driver:'',driverPhone:'',capacity:''};
   modal((id?'Edit':'Add')+' Vehicle',
     `<div class="form-grid">
-      <div class="field"><label>Vehicle Number *</label><input id="v_num" value="${v.number||''}" oninput="plateInput('v_num')" placeholder="AP39WQ0715"></div>
+      <div class="field"><label>Vehicle Number *</label><input id="v_num" value="${esc(v.number||'')}" oninput="plateInput('v_num')" placeholder="AP39WQ0715"></div>
       <div class="field"><label>Capacity (Cum)</label><input id="v_cap" value="${v.capacity||''}" inputmode="decimal" oninput="decimalInput('v_cap')"></div>
-      <div class="field"><label>Driver Name</label><input id="v_drv" value="${v.driver||''}" oninput="lettersInput('v_drv')"></div>
-      <div class="field"><label>Driver Phone</label><input id="v_ph" value="${v.driverPhone||''}" maxlength="10" inputmode="numeric" oninput="digitsInput('v_ph',10)"></div>
+      <div class="field"><label>Driver Name</label><input id="v_drv" value="${esc(v.driver||'')}" oninput="lettersInput('v_drv')"></div>
+      <div class="field"><label>Driver Phone</label><input id="v_ph" value="${esc(v.driverPhone||'')}" maxlength="10" inputmode="numeric" oninput="digitsInput('v_ph',10)"></div>
     </div>`,
     `<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" onclick="saveVeh('${id||''}')">Save</button>`);
 }
@@ -1717,7 +1733,7 @@ function drawInvTbl(){
     `<table class="table"><thead><tr><th>Product</th><th>Category</th><th class="num">Current Stock</th><th class="num">Reorder</th><th class="num">Rate</th><th class="num">Value</th><th class="right">Actions</th></tr></thead><tbody>`+
     prods.map(p=>`<tr>
       <td><b>${esc(p.name)}</b></td><td>${esc(p.category)||'-'}</td>
-      <td class="num"><b class="${lowStock(p)?'stock-low':''}">${p.stock} ${p.unit}</b> ${lowStock(p)?'<span class="pill low">LOW</span>':''}</td>
+      <td class="num"><b class="${lowStock(p)?'stock-low':''}">${p.stock} ${esc(p.unit)}</b> ${lowStock(p)?'<span class="pill low">LOW</span>':''}</td>
       <td class="num">${p.reorder||0}</td><td class="num">₹${inr(p.rate||0)}</td><td class="num">₹${inr(p.stock*(p.rate||0))}</td>
       <td class="right">
         <button class="btn green sm" onclick="moveModal('in','${p.id}')">⬆ In</button>
@@ -1732,9 +1748,9 @@ function stockMoveTable(){
   if(!moves.length) return `<div class="empty">No stock movements yet.</div>`;
   return `<table class="table"><thead><tr><th>Date</th><th>Product</th><th>Type</th><th class="num">Qty</th><th>Note</th></tr></thead><tbody>`+
     moves.map(m=>{const p=product(m.productId);
-      return `<tr><td>${fmtDate(m.date)}</td><td>${p.name||'-'}</td>
+      return `<tr><td>${fmtDate(m.date)}</td><td>${esc(p.name)||'-'}</td>
       <td>${m.type==='in'?'<span class="pill ok2">Stock In</span>':'<span class="pill low">Stock Out</span>'}</td>
-      <td class="num">${m.qty} ${p.unit||''}</td><td>${m.note||''}</td></tr>`;}).join('')+`</tbody></table>`;
+      <td class="num">${m.qty} ${esc(p.unit||'')}</td><td>${esc(m.note||'')}</td></tr>`;}).join('')+`</tbody></table>`;
 }
 function prodModal(id){
   const p=id?product(id):{name:'',category:'Cement',unit:'Bags',stock:'',reorder:'',rate:''};
@@ -1751,7 +1767,7 @@ function prodModal(id){
       <div class="field full"><label>Product Name *</label><input id="pr_name" value="${esc(p.name)}" placeholder="e.g. Cement (OPC 53 Grade)"></div>
       <div class="field"><label>Category</label><select id="pr_cat" onchange="prCatToggle()">${cats.map(c=>`<option ${c===selCat?'selected':''}>${esc(c)}</option>`).join('')}</select></div>
       <div class="field"><label>Unit</label><select id="pr_unit">${units.map(u=>`<option ${u===p.unit?'selected':''}>${esc(u)}</option>`).join('')}</select></div>
-      <div class="field full" id="pr_catother_wrap" style="display:${selCat==='Other'?'block':'none'}"><label>Specify Category *</label><input id="pr_catother" value="${isCustom?p.category:''}" placeholder="e.g. Diesel, GGBS, Water"></div>
+      <div class="field full" id="pr_catother_wrap" style="display:${selCat==='Other'?'block':'none'}"><label>Specify Category *</label><input id="pr_catother" value="${esc(isCustom?p.category:'')}" placeholder="e.g. Diesel, GGBS, Water"></div>
       <div class="field"><label>${id?'Current':'Opening'} Stock</label><input id="pr_stock" type="number" step="0.01" value="${p.stock!==''?p.stock:''}"></div>
       <div class="field"><label>Reorder Level</label><input id="pr_reorder" type="number" step="0.01" value="${p.reorder!==''?p.reorder:''}"></div>
       <div class="field full"><label>Rate per Unit (₹)</label><input id="pr_rate" type="number" step="0.01" value="${p.rate!==''?p.rate:''}"></div>
@@ -1776,7 +1792,7 @@ function delProd(id){ if(!guardEdit())return; if(confirm('Delete this product?')
 function moveModal(type,id){
   const p=product(id);
   modal((type==='in'?'Stock In — ':'Stock Out — ')+p.name,
-    `<div class="calc"><div class="row"><span>Current Stock</span><span><b>${p.stock} ${p.unit}</b></span></div></div>
+    `<div class="calc"><div class="row"><span>Current Stock</span><span><b>${p.stock} ${esc(p.unit)}</b></span></div></div>
      <div class="form-grid" style="margin-top:12px">
       <div class="field"><label>Quantity (${p.unit}) *</label><input id="mv_qty" type="number" step="0.01" placeholder="0"></div>
       <div class="field"><label>Date</label><input id="mv_date" type="date" value="${todayISO()}"></div>
@@ -1875,9 +1891,9 @@ function staffModal(id){
   const s=id?staffById(id):{name:'',role:'',phone:'',wage:'',monthlySalary:'',joinDate:'',leaveAllowed:2,active:true};
   modal((id?'Edit':'Add')+' Staff',
     `<div class="form-grid">
-      <div class="field"><label>Name *</label><input id="sf_name" value="${s.name||''}" oninput="lettersInput('sf_name')"></div>
+      <div class="field"><label>Name *</label><input id="sf_name" value="${esc(s.name||'')}" oninput="lettersInput('sf_name')"></div>
       <div class="field"><label>Designation</label><input id="sf_role" value="${esc(s.role)}" placeholder="Driver / Operator / Loader"></div>
-      <div class="field"><label>Phone</label><input id="sf_phone" value="${s.phone||''}" maxlength="10" inputmode="numeric" oninput="digitsInput('sf_phone',10)"></div>
+      <div class="field"><label>Phone</label><input id="sf_phone" value="${esc(s.phone||'')}" maxlength="10" inputmode="numeric" oninput="digitsInput('sf_phone',10)"></div>
       <div class="field"><label>Joining Date</label><input id="sf_join" type="date" value="${s.joinDate||''}"></div>
       <div class="field"><label>Monthly Salary (₹)</label><input id="sf_msal" type="number" value="${s.monthlySalary!==''&&s.monthlySalary!=null?s.monthlySalary:''}"></div>
       <div class="field"><label>Wage per day (₹)</label><input id="sf_wage" type="number" value="${s.wage!==''&&s.wage!=null?s.wage:''}"></div>
@@ -2036,7 +2052,7 @@ function printPayslip(id){
       <tr class="net"><td>NET PAYABLE</td><td class="r">₹ ${inr(c.net)}</td></tr>
     </tbody></table>
     <div class="muted" style="margin-top:8px">${numToWords(c.net)}</div>
-    <div style="margin-top:34px;display:flex;justify-content:space-between"><div>Employee Signature</div><div>For ${co.name}</div></div>
+    <div style="margin-top:34px;display:flex;justify-content:space-between"><div>Employee Signature</div><div>For ${esc(co.name)}</div></div>
     <div class="muted" style="margin-top:16px;text-align:center">Computer-generated salary slip • 30-day salary basis.</div>
     </body></html>`;
   openPrint(html);
@@ -2107,8 +2123,8 @@ function vendorModal(id){
     `<div class="form-grid">
       <div class="field full"><label>Vendor Name *</label><input id="vn_name" value="${esc(v.name)}"></div>
       <div class="field"><label>Material Supplied</label><input id="vn_mat" value="${esc(v.material)}" placeholder="Cement / Aggregate / Sand"></div>
-      <div class="field"><label>GSTIN</label><input id="vn_gstin" value="${v.gstin||''}" maxlength="15" oninput="upperInput('vn_gstin')"></div>
-      <div class="field"><label>Phone</label><input id="vn_phone" value="${v.phone||''}" maxlength="10" inputmode="numeric" oninput="digitsInput('vn_phone',10)"></div>
+      <div class="field"><label>GSTIN</label><input id="vn_gstin" value="${esc(v.gstin||'')}" maxlength="15" oninput="upperInput('vn_gstin')"></div>
+      <div class="field"><label>Phone</label><input id="vn_phone" value="${esc(v.phone||'')}" maxlength="10" inputmode="numeric" oninput="digitsInput('vn_phone',10)"></div>
       <div class="field full"><label>Address</label><textarea id="vn_addr" rows="2">${esc(v.address)}</textarea></div>
     </div>`,
     `<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn" onclick="saveVendor('${id||''}')">Save</button>`);
@@ -2132,7 +2148,7 @@ function delVendor(id){
 function purchaseModal(id){
   const p=id?(DB.purchases||[]).find(x=>x.id===id):{vendorId:'',productId:'',qty:'',rate:'',date:todayISO(),billNo:'',paid:''};
   const vopts=(DB.vendors||[]).map(v=>`<option value="${v.id}" ${v.id===p.vendorId?'selected':''}>${esc(v.name)}</option>`).join('');
-  const popts=(DB.products||[]).map(pr=>`<option value="${pr.id}" ${pr.id===p.productId?'selected':''}>${pr.name} (${pr.unit})</option>`).join('');
+  const popts=(DB.products||[]).map(pr=>`<option value="${esc(pr.id)}" ${pr.id===p.productId?'selected':''}>${esc(pr.name)} (${esc(pr.unit)})</option>`).join('');
   modal((id?'Edit':'Record')+' Purchase',
     `<div class="form-grid">
       <div class="field"><label>Vendor *</label><select id="pu_vendor"><option value="">— Select Vendor —</option>${vopts}</select></div>

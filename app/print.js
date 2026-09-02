@@ -142,9 +142,9 @@ function invoiceHTML(inv, company, opts){
         </td>
         <td class="c">${esc(inv.hsn)}</td>
         <td class="c">${c.noGst?'—':c.gstRate+'%'}</td>
-        <td class="r">${inv.qty.toFixed(2)} ${tcase(inv.unit)}</td>
+        <td class="r">${inv.qty.toFixed(2)} ${esc(tcase(inv.unit))}</td>
         <td class="r">${inr(inv.rate)}</td>
-        <td class="c">${tcase(inv.unit)}</td>
+        <td class="c">${esc(tcase(inv.unit))}</td>
         <td class="r b">${inr(c.taxable)}</td>
       </tr>
       ${c.pump>0?`<tr>
@@ -157,7 +157,7 @@ function invoiceHTML(inv, company, opts){
         <td class="c">Job</td>
         <td class="r b">${inr(c.pump)}</td>
       </tr>`:''}
-      <tr><td colspan="4" class="r b">Total</td><td class="r b">${inv.qty.toFixed(2)} ${tcase(inv.unit)}</td><td colspan="2"></td><td class="r b">₹ ${inr(c.grand)}</td></tr>
+      <tr><td colspan="4" class="r b">Total</td><td class="r b">${inv.qty.toFixed(2)} ${esc(tcase(inv.unit))}</td><td colspan="2"></td><td class="r b">₹ ${inr(c.grand)}</td></tr>
     </table>
     <div class="words">Amount Chargeable (in words):&nbsp; ${numToWords(c.grand)} <span style="float:right;font-weight:400">E. &amp; O.E</span></div>
     ${c.noGst
