@@ -64,8 +64,8 @@ function invoiceHTML(inv, company, opts){
   const c = computeInvoice(inv, company);
   const isChallan = opts && opts.challan;
   const taxSummary = c.interState
-    ? `<tr><td>${inv.hsn}</td><td class="r">${inr(c.baseTaxable)}</td><td class="c">${c.gstRate}%</td><td class="r">${inr(c.igst)}</td><td class="r">${inr(c.totalTax)}</td></tr>`
-    : `<tr><td>${inv.hsn}</td><td class="r">${inr(c.baseTaxable)}</td><td class="c">${c.gstRate/2}%</td><td class="r">${inr(c.cgst)}</td><td class="c">${c.gstRate/2}%</td><td class="r">${inr(c.sgst)}</td><td class="r">${inr(c.totalTax)}</td></tr>`;
+    ? `<tr><td class="c">${esc(inv.hsn)}</td><td class="r">${inr(c.baseTaxable)}</td><td class="c">${c.gstRate}%</td><td class="r">${inr(c.igst)}</td><td class="r">${inr(c.totalTax)}</td></tr>`
+    : `<tr><td class="c">${esc(inv.hsn)}</td><td class="r">${inr(c.baseTaxable)}</td><td class="c">${c.gstRate/2}%</td><td class="r">${inr(c.cgst)}</td><td class="c">${c.gstRate/2}%</td><td class="r">${inr(c.sgst)}</td><td class="r">${inr(c.totalTax)}</td></tr>`;
   const taxSummaryHead = c.interState
     ? `<tr><th rowspan="2">HSN/SAC</th><th rowspan="2">Taxable Value</th><th colspan="2">IGST</th><th rowspan="2">Total Tax Amount</th></tr><tr><th>Rate</th><th>Amount</th></tr>`
     : `<tr><th rowspan="2">HSN/SAC</th><th rowspan="2">Taxable Value</th><th colspan="2">CGST</th><th colspan="2">SGST</th><th rowspan="2">Total Tax Amount</th></tr><tr><th>Rate</th><th>Amount</th><th>Rate</th><th>Amount</th></tr>`;
@@ -107,7 +107,10 @@ function invoiceHTML(inv, company, opts){
     .words{padding:4px 6px;font-weight:700}
     .bank td{border:none;padding:1px 5px}
     .sign{height:70px}
-    .logo{width:70px;height:70px;object-fit:contain;float:left;margin-right:8px}
+    .seller{padding:10px 12px}
+    .seller-head{display:flex;gap:14px;align-items:center}
+    .seller-info{min-width:0}
+    .logo{width:72px;height:72px;object-fit:contain;flex:none;display:block}
     .qr{width:64px;height:64px}
     .foot{text-align:center;font-style:italic;padding:5px;font-size:10px}
     @media print{.noprint{display:none}}
@@ -117,12 +120,16 @@ function invoiceHTML(inv, company, opts){
     <table class="head">
       <tr>
         <td rowspan="4" class="seller">
-          <img src="${window.LOGO_DATA||''}" class="logo">
-          <b>M/S ${esc(company.name)}</b><br>
-          ${company.addressLines.map(l=>`<span class="small">${esc(l)}</span>`).join('<br>')}<br>
-          <span class="small">GSTIN/UIN: ${esc(company.gstin)}</span><br>
-          <span class="small">State Name: ${esc(company.stateName)}, Code: ${esc(company.stateCode)}</span><br>
-          <span class="small">E-Mail: ${esc(company.email)}</span>
+          <div class="seller-head">
+            <img src="${window.LOGO_DATA||''}" class="logo">
+            <div class="seller-info">
+              <b>M/S ${esc(company.name)}</b><br>
+              ${company.addressLines.map(l=>`<span class="small">${esc(l)}</span>`).join('<br>')}<br>
+              <span class="small">GSTIN/UIN: <b>${esc(company.gstin)}</b></span><br>
+              <span class="small">State Name: ${esc(company.stateName)}, Code: ${esc(company.stateCode)}</span><br>
+              <span class="small">E-Mail: ${esc(company.email)}</span>
+            </div>
+          </div>
         </td>
         <td style="width:190px">Invoice No.<br><b>${esc(inv.no)}</b></td>
         <td style="width:190px">Dated<br><b>${fmtDate(inv.date)}</b></td>
@@ -135,7 +142,7 @@ function invoiceHTML(inv, company, opts){
           <b>Buyer (Bill to):</b><br>
           <b>${esc(inv.buyerName)}</b><br>
           <span class="small">${esc(inv.buyerAddress||'').replace(/\n/g,'<br>')}</span><br>
-          <span class="small">GSTIN/UIN: ${esc(inv.buyerGstin)||'-'}</span><br>
+          <span class="small">GSTIN/UIN: <b>${esc(inv.buyerGstin)||'-'}</b></span><br>
           <span class="small">State Name: ${esc(inv.buyerState)}, Code: ${esc(inv.buyerStateCode)}</span>
         </td>
         <td colspan="2" class="seller">
