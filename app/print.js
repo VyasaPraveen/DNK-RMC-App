@@ -78,7 +78,8 @@ function invoiceHTML(inv, company, opts){
     @page{size:A4;margin:0}
     *{box-sizing:border-box}
     html,body{margin:0}
-    body{font-family:"Segoe UI",Arial,sans-serif;color:#111;font-size:11px;padding:12mm}
+    /* A4 with a comfortable buffer so the whole invoice always fits on one page. */
+    body{font-family:"Segoe UI",Arial,sans-serif;color:#111;font-size:11px;padding:9mm}
     .doc{border:1px solid #000}
     .title{text-align:center;font-weight:700;padding:5px;font-size:13px;position:relative}
     .title .copy{position:absolute;right:6px;top:5px;font-size:9px;font-weight:400;color:#555}
@@ -103,10 +104,10 @@ function invoiceHTML(inv, company, opts){
     /* GST charge lines shown as their own rows, entirely bold */
     .items .gst-line td{font-weight:700}
     .items .desc{vertical-align:top}
-    .items td{padding-top:8px;padding-bottom:8px}
+    .items td{padding-top:6px;padding-bottom:6px}
     .words{padding:4px 6px;font-weight:700}
     .bank td{border:none;padding:1px 5px}
-    .sign{height:70px}
+    .sign{height:52px}
     .seller{padding:10px 12px}
     .seller-head{display:flex;gap:14px;align-items:center}
     .seller-info{min-width:0}

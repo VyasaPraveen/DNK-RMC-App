@@ -91,6 +91,7 @@ const ROLE_PERMS = {
 };
 /* Auditor is read-only — this gate blocks every create/edit/delete action. */
 function canEdit(){ return !(ME && ME.role==='Auditor'); }
+function isAdmin(){ return !!(ME && ME.role==='Admin'); }
 function guardEdit(){ if(!canEdit()){ toast('Auditor access is read-only','err'); return false; } return true; }
 function nowStamp(){ const d=new Date(); return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,19).replace('T',' '); }
 /* Activity / audit trail — records who did what, timestamped */
@@ -654,8 +655,11 @@ function renderNewInvoice(editId){
   const autoNo = ed ? ed.no : 'DNK/'+(DB.seq+1);
   const cust = customer(form.customerId);
   const unreg = form.customerId && !(cust.gstin && cust.gstin.trim());
+  // Admin may set/override the invoice number (e.g. to start a continuation series);
+  // the next bill always auto-continues from the highest number generated so far.
+  const editNo = unreg || isAdmin();
   document.getElementById('main').innerHTML=
-    topbar(ed?'Edit Bill — '+ed.no:'New Dispatch / Bill', ed?'Update invoice details. Number stays fixed for registered buyers; editable for unregistered.':'Select masters — GST is calculated automatically. Invoice: <b>'+autoNo+'</b>')+
+    topbar(ed?'Edit Bill — '+ed.no:'New Dispatch / Bill', ed?'Update invoice details. Registered-buyer numbers are fixed unless you are an Admin.':'Select masters — GST is calculated automatically. Invoice: <b>'+autoNo+'</b>')+
     `<div class="grid" style="grid-template-columns:1.4fr 1fr;align-items:start">
       <div class="card"><div class="hd"><h3>Dispatch Details</h3></div><div class="bd">
         <div class="form-grid">
@@ -682,8 +686,8 @@ function renderNewInvoice(editId){
           <div class="field"><label>Invoice Date</label><input id="f_date" type="date" value="${form.date}"></div>
           <div class="field"><label>Dispatched Through</label>
             <select id="f_dispatch">${optListWith('dispatchThrough',form.dispatchThrough).map(o=>`<option ${o===form.dispatchThrough?'selected':''}>${esc(o)}</option>`).join('')}</select></div>
-          <div class="field"><label>Invoice Number ${unreg?'<span class="muted">(editable — unregistered buyer)</span>':''}</label>
-            <input id="f_no" value="${esc(form.no||autoNo)}" ${unreg?'':'readonly'} title="${unreg?'Editable for unregistered buyers':'Auto-numbered for registered buyers'}"></div>
+          <div class="field"><label>Invoice Number ${editNo?'<span class="muted">(editable — next bill auto-continues)</span>':''}</label>
+            <input id="f_no" value="${esc(form.no||autoNo)}" ${editNo?'':'readonly'} title="${editNo?'Editable — the next bill auto-continues from the highest number':'Auto-numbered for registered buyers'}"></div>
         </div>
       </div></div>
       <div class="card"><div class="hd"><h3>Invoice Summary</h3></div><div class="bd">
@@ -704,8 +708,9 @@ function onCust(cid){
   const opts=DB.sites.filter(s=>s.customerId===cid).map(s=>`<option value="${s.id}">${esc(s.name)}</option>`).join('');
   document.getElementById('f_site').innerHTML=`<option value="">— Select Site —</option>`+opts;
   const c=customer(cid); const unreg = cid && !(c.gstin && c.gstin.trim());
+  const editNo = unreg || isAdmin();
   const noEl=document.getElementById('f_no');
-  if(noEl){ noEl.readOnly=!unreg; if(!unreg) noEl.value = form.editId ? form.no : 'DNK/'+(DB.seq+1); }
+  if(noEl){ noEl.readOnly=!editNo; if(!form.editId && !editNo) noEl.value='DNK/'+(DB.seq+1); }
   autoRate(); onCalc();
 }
 /* A "PUMP" grade is a pump-only service line — Quantity & Rate are optional for it. */
@@ -778,12 +783,14 @@ function saveInvoice(){
   }
   const c=customer(form.customerId);
   const unreg = !(c.gstin && c.gstin.trim());
+  const editNo = unreg || isAdmin();     // Admin can always set/override the number
   const autoNo='DNK/'+(DB.seq+1);
   // ----- Edit existing invoice -----
   if(form.editId){
     const inv=DB.invoices.find(i=>i.id===form.editId); if(!inv) return toast('Invoice not found','err');
     let no=inv.no;
-    if(unreg && form.no){
+    if(editNo && form.no){
+      if(!form.no.trim()) return toast('Invoice number cannot be blank','err');
       if(form.no!==inv.no && DB.invoices.some(x=>x.id!==inv.id && x.no===form.no)) return toast('Invoice number already exists','err');
       no=form.no;
     }
@@ -796,7 +803,8 @@ function saveInvoice(){
   }
   // ----- New invoice -----
   let no=autoNo;
-  if(unreg && form.no && form.no!==autoNo){           // custom manual number (unregistered only)
+  if(editNo && form.no && form.no!==autoNo){           // custom manual number (unregistered buyer, or Admin)
+    if(!form.no.trim()) return toast('Invoice number cannot be blank','err');
     if(DB.invoices.some(x=>x.no===form.no)) return toast('Invoice number already exists','err');
     no=form.no;
   }
