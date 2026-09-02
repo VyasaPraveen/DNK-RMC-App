@@ -596,6 +596,12 @@ function optList(key){
   const cur=(typeof DB!=='undefined'&&DB&&DB.lists)?DB.lists[key]:null;
   return (Array.isArray(cur)&&cur.length)?cur.slice():def;
 }
+/* Options for a dropdown that must still show an existing record's saved value even
+   if the Admin later removed that option — keeps old records from silently changing. */
+function optListWith(key,current){
+  const a=optList(key);
+  return (current&&!a.includes(current))?[current].concat(a):a;
+}
 
 /* Role presets — Admin (full), Accountant (operations, no users/settings/audit),
    Auditor (read-only: can view records & audit log, cannot create/edit/delete). */
@@ -1179,7 +1185,7 @@ function renderNewInvoice(editId){
             <label style="display:flex;align-items:center;gap:8px;font-weight:500;font-size:13px;height:38px"><input type="checkbox" id="f_pumpgst" ${form.pumpGst?'checked':''} onchange="onCalc()" style="width:auto"> Apply GST on pump charges</label></div>
           <div class="field"><label>Invoice Date</label><input id="f_date" type="date" value="${form.date}"></div>
           <div class="field"><label>Dispatched Through</label>
-            <select id="f_dispatch">${optList('dispatchThrough').map(o=>`<option ${o===form.dispatchThrough?'selected':''}>${esc(o)}</option>`).join('')}</select></div>
+            <select id="f_dispatch">${optListWith('dispatchThrough',form.dispatchThrough).map(o=>`<option ${o===form.dispatchThrough?'selected':''}>${esc(o)}</option>`).join('')}</select></div>
           <div class="field"><label>Invoice Number ${unreg?'<span class="muted">(editable — unregistered buyer)</span>':''}</label>
             <input id="f_no" value="${form.no||autoNo}" ${unreg?'':'readonly'} title="${unreg?'Editable for unregistered buyers':'Auto-numbered for registered buyers'}"></div>
         </div>
@@ -2116,7 +2122,7 @@ function leadModal(id){
       <div class="field"><label>Source</label><input id="ld_source" value="${esc(l.source)}" placeholder="Reference / Website / Tender"></div>
       <div class="field full"><label>Requirement</label><input id="ld_req" value="${esc(l.requirement)}"></div>
       <div class="field"><label>Est. Value (₹)</label><input id="ld_value" type="number" value="${l.value||''}"></div>
-      <div class="field"><label>Status</label><select id="ld_status">${optList('leadStatus').map(s=>`<option ${s===l.status?'selected':''}>${esc(s)}</option>`).join('')}</select></div>
+      <div class="field"><label>Status</label><select id="ld_status">${optListWith('leadStatus',l.status).map(s=>`<option ${s===l.status?'selected':''}>${esc(s)}</option>`).join('')}</select></div>
       <div class="field"><label>Next Follow-up</label><input id="ld_follow" type="date" value="${l.nextFollowup||''}"></div>
       <div class="field full"><label>Notes</label><textarea id="ld_notes" rows="2">${esc(l.notes)}</textarea></div>
    </div>`,
