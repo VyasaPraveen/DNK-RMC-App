@@ -85,9 +85,9 @@ function optListWith(key,current){
 /* Role presets — Admin (full), Accountant (operations, no users/settings/audit),
    Auditor (read-only: can view records & audit log, cannot create/edit/delete). */
 const ROLE_PERMS = {
-  Admin:      {dashboard:1,newinvoice:1,invoices:1,payments:1,inventory:1,materials:1,staff:1,payroll:1,vendors:1,vehiclelog:1,leads:1,concalc:1,revenue:1,customers:1,sites:1,vehicles:1,grades:1,rates:1,reports:1,activity:1,users:1,settings:1},
-  Accountant: {dashboard:1,newinvoice:1,invoices:1,payments:1,inventory:1,materials:1,staff:1,payroll:1,vendors:1,vehiclelog:1,leads:1,concalc:1,revenue:1,customers:1,sites:1,vehicles:1,grades:1,rates:1,reports:1,activity:0,users:0,settings:0},
-  Auditor:    {dashboard:1,newinvoice:0,invoices:1,payments:1,inventory:1,materials:1,staff:1,payroll:1,vendors:1,vehiclelog:1,leads:0,concalc:0,revenue:0,customers:1,sites:1,vehicles:1,grades:1,rates:1,reports:1,activity:1,users:0,settings:0}
+  Admin:      {dashboard:1,newinvoice:1,invoices:1,payments:1,inventory:1,materials:1,staff:1,payroll:1,vendors:1,vehiclelog:1,leads:1,concalc:1,revenue:1,customers:1,sites:1,vehicles:1,grades:1,rates:1,reports:1,activity:1,users:1,settings:1,manual:1},
+  Accountant: {dashboard:1,newinvoice:1,invoices:1,payments:1,inventory:1,materials:1,staff:1,payroll:1,vendors:1,vehiclelog:1,leads:1,concalc:1,revenue:1,customers:1,sites:1,vehicles:1,grades:1,rates:1,reports:1,activity:0,users:0,settings:0,manual:1},
+  Auditor:    {dashboard:1,newinvoice:0,invoices:1,payments:1,inventory:1,materials:1,staff:1,payroll:1,vendors:1,vehiclelog:1,leads:0,concalc:0,revenue:0,customers:1,sites:1,vehicles:1,grades:1,rates:1,reports:1,activity:1,users:0,settings:0,manual:1}
 };
 /* Auditor is read-only — this gate blocks every create/edit/delete action. */
 function canEdit(){ return !(ME && ME.role==='Auditor'); }
@@ -251,7 +251,7 @@ function migrate(d){
   d.staff.forEach(st=>{ if(st.monthlySalary==null) st.monthlySalary=(st.wage||0)*26; if(st.leaveAllowed==null) st.leaveAllowed=2; if(st.joinDate==null) st.joinDate=''; });
   // feature toggles + user credentials
   if(!d.features||typeof d.features!=='object') d.features={};
-  d.users.forEach(u=>{ if(!u.pwd) u.pwd=hashStr((u.username||'user')+'@123'); if(!u.secQ){ u.secQ='In which town is the plant located?'; u.secA=hashStr('vkota'); } });
+  d.users.forEach(u=>{ if(!u.pwd) u.pwd=hashStr((u.username||'user')+'@123'); if(!u.secQ){ u.secQ='In which town is the plant located?'; u.secA=hashStr('vkota'); } if(u.perms && u.perms.manual==null) u.perms.manual=1; });
   return d;
 }
 function save(){ store.set(DB_KEY,JSON.stringify(DB)); cloudSchedulePush(); }
@@ -354,7 +354,7 @@ const routes = {
   leads:renderLeads, concalc:renderConcalc, revenue:renderRevenue, users:renderUsers,
   inventory:renderInventory, staff:renderStaff, payroll:renderPayroll,
   vendors:renderVendors, activity:renderActivity,
-  materials:renderMaterials, vehiclelog:renderVehicleLog
+  materials:renderMaterials, vehiclelog:renderVehicleLog, manual:renderManual
 };
 let current='dashboard';
 function go(route){
@@ -550,6 +550,7 @@ const NAV=[
     {r:'activity',ic:'🕒',t:'Activity Log'},
     {r:'users',ic:'👥',t:'Users & Permissions'},
     {r:'settings',ic:'⚙️',t:'Settings & Backup'},
+    {r:'manual',ic:'📘',t:'App Manual'},
   ]},
 ];
 function renderApp(){
@@ -1391,6 +1392,23 @@ function runImport(spec,rows){
 }
 
 /* ---------------- Settings & Backup ---------------- */
+/* App Manual — the full user guide, rendered in an isolated iframe so its own
+   styles never clash with the app. Content is bundled at build time (MANUAL_HTML). */
+function renderManual(){
+  document.getElementById('main').innerHTML=topbar('App Manual','Complete user guide &amp; feature documentation',
+    `<button class="btn ghost" onclick="manualPrint()">🖨 Save as PDF</button>`)+
+    `<div class="card" style="padding:0;overflow:hidden">
+       <iframe id="manualFrame" title="DNK RMC App Manual" style="width:100%;height:calc(100vh - 172px);min-height:520px;border:0;display:block;background:#fff"></iframe>
+     </div>`;
+  const f=document.getElementById('manualFrame');
+  if(f){ if(window.MANUAL_HTML) f.srcdoc=window.MANUAL_HTML;
+    else f.srcdoc='<p style="font-family:sans-serif;padding:24px">Manual not available in this build.</p>'; }
+}
+function manualPrint(){
+  const f=document.getElementById('manualFrame');
+  try{ f.contentWindow.focus(); f.contentWindow.print(); }
+  catch(e){ toast('Use your browser Print (Ctrl+P) → Save as PDF','err'); }
+}
 function renderSettings(){
   const co=DB.company;
   document.getElementById('main').innerHTML=topbar('Settings &amp; Backup','Company details, data backup and restore')+
@@ -1634,7 +1652,7 @@ function saveLead(id){
 function delLead(id){ if(confirm('Delete lead?')){ DB.leads=DB.leads.filter(l=>l.id!==id); save(); renderLeads(); } }
 
 /* ---- Users & Permissions ---- */
-const PERM_LABELS={dashboard:'Dashboard',newinvoice:'New Bill',invoices:'Invoices',payments:'Outstanding',inventory:'Product Inventory',materials:'Materials Received',vendors:'Vendors & Purchases',vehiclelog:'Vehicle Log',staff:'Staff Attendance',payroll:'Salary / Payroll',leads:'Leads',concalc:'Concrete Calc',revenue:'Revenue Calc',customers:'Customers',sites:'Sites',vehicles:'Vehicles',grades:'Grades',rates:'Rates',reports:'Reports',activity:'Activity Log',users:'Users',settings:'Settings'};
+const PERM_LABELS={dashboard:'Dashboard',newinvoice:'New Bill',invoices:'Invoices',payments:'Outstanding',inventory:'Product Inventory',materials:'Materials Received',vendors:'Vendors & Purchases',vehiclelog:'Vehicle Log',staff:'Staff Attendance',payroll:'Salary / Payroll',leads:'Leads',concalc:'Concrete Calc',revenue:'Revenue Calc',customers:'Customers',sites:'Sites',vehicles:'Vehicles',grades:'Grades',rates:'Rates',reports:'Reports',activity:'Activity Log',users:'Users',settings:'Settings',manual:'App Manual'};
 function renderUsers(){
   const users=DB.users||[];
   document.getElementById('main').innerHTML=topbar('Users & Permissions','Create staff logins and control what each person can access',

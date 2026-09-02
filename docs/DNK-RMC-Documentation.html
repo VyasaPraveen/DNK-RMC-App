@@ -1,0 +1,687 @@
+<title>DNK RMC Handbook</title>
+<meta name="description" content="Feature guide and how-to documentation for the DNK Power Conmix RMC billing & plant-management system, by EPIXS Media.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --paper:#ffffff;
+  --ground:#eef1f5;
+  --panel:#f7f9fc;
+  --ink:#16233a;
+  --ink-soft:#4c5c74;
+  --muted:#7b8798;
+  --line:#dbe2ec;
+  --line-soft:#e8edf4;
+  --brand:#14508c;
+  --brand-deep:#0f3e6e;
+  --brand-tint:#e9f1fa;
+  --gold:#b07d10;
+  --gold-bright:#f0b323;
+  --green:#15833f;
+  --green-tint:#e6f4ea;
+  --red:#c1273f;
+  --red-tint:#fbeaed;
+  --shadow:0 1px 2px rgba(16,32,58,.05),0 6px 22px rgba(16,32,58,.07);
+  --shadow-sm:0 1px 2px rgba(16,32,58,.06);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#141d2e;
+    --ground:#0d1522;
+    --panel:#182339;
+    --ink:#e9eff7;
+    --ink-soft:#aebccf;
+    --muted:#7f8ea3;
+    --line:#28374f;
+    --line-soft:#212f45;
+    --brand:#5b9bd8;
+    --brand-deep:#7cb2e6;
+    --brand-tint:#17273f;
+    --gold:#e6b23e;
+    --gold-bright:#f3c661;
+    --green:#4fc47d;
+    --green-tint:#132a1f;
+    --red:#f0788a;
+    --red-tint:#2a1720;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 26px rgba(0,0,0,.34);
+    --shadow-sm:0 1px 2px rgba(0,0,0,.4);
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#141d2e;
+  --ground:#0d1522;
+  --panel:#182339;
+  --ink:#e9eff7;
+  --ink-soft:#aebccf;
+  --muted:#7f8ea3;
+  --line:#28374f;
+  --line-soft:#212f45;
+  --brand:#5b9bd8;
+  --brand-deep:#7cb2e6;
+  --brand-tint:#17273f;
+  --gold:#e6b23e;
+  --gold-bright:#f3c661;
+  --green:#4fc47d;
+  --green-tint:#132a1f;
+  --red:#f0788a;
+  --red-tint:#2a1720;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 26px rgba(0,0,0,.34);
+  --shadow-sm:0 1px 2px rgba(0,0,0,.4);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:24px}
+@media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+body{
+  margin:0;background:var(--ground);color:var(--ink);
+  font-family:"IBM Plex Sans",system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  font-size:16.5px;line-height:1.62;-webkit-font-smoothing:antialiased;
+}
+h1,h2,h3,h4{font-family:"Archivo","IBM Plex Sans",sans-serif;line-height:1.15;text-wrap:balance;margin:0}
+a{color:var(--brand);text-decoration:none}
+a:hover{text-decoration:underline}
+code,.mono{font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+:focus-visible{outline:2.5px solid var(--brand);outline-offset:2px;border-radius:4px}
+
+/* ---------- Cover ---------- */
+.cover{position:relative;overflow:hidden;background:linear-gradient(150deg,#0f3e6e 0%,#14508c 60%,#1a5ea3 100%);color:#fff}
+.cover .grid-bg{position:absolute;inset:0;opacity:.16;background-image:linear-gradient(#fff 1px,transparent 1px),linear-gradient(90deg,#fff 1px,transparent 1px);background-size:34px 34px;mask-image:radial-gradient(ellipse 80% 90% at 70% 10%,#000,transparent 78%)}
+.cover-inner{position:relative;max-width:1180px;margin:0 auto;padding:66px 40px 58px}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12.5px;letter-spacing:.22em;text-transform:uppercase;color:var(--gold-bright);font-weight:500}
+.cover h1{font-size:clamp(38px,6vw,62px);font-weight:800;letter-spacing:-.02em;margin:20px 0 0}
+.cover .lede{font-size:clamp(17px,2.2vw,20px);color:#d6e5f5;max-width:60ch;margin:20px 0 0;line-height:1.55}
+.cover-badge{display:inline-flex;align-items:center;gap:12px;margin-bottom:6px}
+.cover-badge .mark{width:44px;height:44px;border-radius:11px;background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.22);display:grid;place-items:center;font-size:22px}
+.cover-badge .mark-txt{font-family:"Archivo";font-weight:800;font-size:15px;letter-spacing:.02em}
+.cover-badge .mark-txt small{display:block;font-family:"IBM Plex Mono";font-weight:400;font-size:10px;letter-spacing:.18em;color:#bcd3ec;text-transform:uppercase}
+.meta-row{display:flex;flex-wrap:wrap;gap:10px 12px;margin-top:34px}
+.meta-chip{display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:999px;padding:7px 14px;font-size:13.5px;font-family:"IBM Plex Mono";color:#eaf2fb}
+.meta-chip b{color:#fff;font-weight:600}
+.meta-chip .dot{width:7px;height:7px;border-radius:50%;background:#4ade80}
+
+/* ---------- Layout ---------- */
+.wrap{max-width:1180px;margin:0 auto;padding:0 40px;display:grid;grid-template-columns:242px minmax(0,1fr);gap:52px;align-items:start}
+.toc{position:sticky;top:24px;align-self:start;padding:30px 0;max-height:calc(100vh - 40px);overflow:auto}
+.toc h5{font-family:"IBM Plex Mono";font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);margin:0 0 12px;font-weight:600}
+.toc ol{list-style:none;margin:0;padding:0;counter-reset:toc}
+.toc li{counter-increment:toc;margin:1px 0}
+.toc a{display:flex;gap:11px;align-items:baseline;padding:7px 12px;border-radius:8px;color:var(--ink-soft);font-size:14px;font-weight:500;line-height:1.3}
+.toc a::before{content:counter(toc,decimal-leading-zero);font-family:"IBM Plex Mono";font-size:11px;color:var(--gold);font-weight:600;flex:none}
+.toc a:hover{background:var(--brand-tint);color:var(--brand);text-decoration:none}
+.content{padding:40px 0 20px;min-width:0}
+
+/* ---------- Sections ---------- */
+.section{padding:22px 0 10px;border-top:1px solid var(--line);margin-top:30px}
+.section:first-of-type{border-top:none;margin-top:0}
+.sec-num{font-family:"IBM Plex Mono";font-size:13px;letter-spacing:.14em;color:var(--gold);font-weight:600;text-transform:uppercase}
+.section>h2{font-size:clamp(25px,3.4vw,32px);font-weight:800;letter-spacing:-.015em;margin:10px 0 0}
+.section>.intro{color:var(--ink-soft);font-size:17px;max-width:68ch;margin:14px 0 4px}
+.content p{max-width:70ch}
+h3.sub{font-size:20px;font-weight:700;margin:34px 0 4px;color:var(--ink);letter-spacing:-.01em}
+
+/* ---------- Feature cards ---------- */
+.feat{background:var(--paper);border:1px solid var(--line);border-radius:15px;box-shadow:var(--shadow-sm);padding:22px 24px;margin-top:18px}
+.feat-head{display:flex;align-items:center;gap:13px;margin-bottom:4px}
+.feat-ic{width:38px;height:38px;border-radius:10px;background:var(--brand-tint);color:var(--brand);display:grid;place-items:center;font-size:19px;flex:none}
+.feat-head h4{font-size:18px;font-weight:700;letter-spacing:-.01em}
+.feat .what{color:var(--ink-soft);margin:2px 0 0;font-size:15.5px}
+.howto-label{font-family:"IBM Plex Mono";font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);font-weight:600;margin:18px 0 8px;display:block}
+ol.steps{margin:0;padding:0;list-style:none;counter-reset:s}
+ol.steps li{counter-increment:s;position:relative;padding:5px 0 5px 38px;font-size:15.5px;line-height:1.55}
+ol.steps li::before{content:counter(s);position:absolute;left:0;top:4px;width:24px;height:24px;border-radius:50%;background:var(--brand);color:#fff;font-family:"IBM Plex Mono";font-size:12px;font-weight:600;display:grid;place-items:center}
+ol.steps li+li{border-top:1px solid var(--line-soft)}
+.kbd{font-family:"IBM Plex Mono";font-size:.86em;background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:1px 7px;color:var(--ink);white-space:nowrap}
+.path{font-family:"IBM Plex Mono";font-size:.85em;font-weight:500;color:var(--brand);background:var(--brand-tint);padding:2px 8px;border-radius:6px;white-space:nowrap}
+
+/* ---------- Callouts ---------- */
+.note{border-radius:12px;padding:15px 18px 15px 18px;margin:20px 0;font-size:15px;border:1px solid var(--line);background:var(--panel);position:relative}
+.note b.tag{display:block;font-family:"IBM Plex Mono";font-size:11px;letter-spacing:.12em;text-transform:uppercase;margin-bottom:5px}
+.note.tip{background:var(--green-tint);border-color:color-mix(in srgb,var(--green) 30%,transparent)}
+.note.tip b.tag{color:var(--green)}
+.note.warn{background:var(--red-tint);border-color:color-mix(in srgb,var(--red) 32%,transparent)}
+.note.warn b.tag{color:var(--red)}
+.note.gold{background:color-mix(in srgb,var(--gold-bright) 14%,var(--paper));border-color:color-mix(in srgb,var(--gold) 40%,transparent)}
+.note.gold b.tag{color:var(--gold)}
+
+/* ---------- Tables ---------- */
+.table-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:12px;margin:20px 0;box-shadow:var(--shadow-sm)}
+table{border-collapse:collapse;width:100%;font-size:14.5px;background:var(--paper)}
+th,td{text-align:left;padding:11px 15px;border-bottom:1px solid var(--line-soft)}
+thead th{background:var(--panel);font-family:"IBM Plex Mono";font-size:11.5px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-soft);font-weight:600}
+tbody tr:last-child td{border-bottom:none}
+td .mono{font-size:.92em}
+
+/* pills */
+.pill{display:inline-block;padding:2px 10px;border-radius:20px;font-size:12px;font-weight:600;font-family:"IBM Plex Sans"}
+.pill.b{background:var(--brand-tint);color:var(--brand)}
+.pill.g{background:var(--green-tint);color:var(--green)}
+.pill.r{background:var(--red-tint);color:var(--red)}
+
+/* two-column feature grids */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.grid2 .feat{margin-top:0}
+
+/* ---------- Footer / contact ---------- */
+.support{margin-top:56px;border-radius:20px;overflow:hidden;border:1px solid var(--line);box-shadow:var(--shadow)}
+.support .top{background:linear-gradient(135deg,#0f3e6e,#14508c);color:#fff;padding:34px 34px 30px}
+.support .top .eyebrow{color:var(--gold-bright)}
+.support .top h2{font-size:27px;font-weight:800;margin:12px 0 8px;color:#fff}
+.support .top p{color:#cfe0f2;max-width:60ch;margin:0}
+.support .body{background:var(--paper);padding:30px 34px 32px;display:grid;grid-template-columns:1.1fr 1fr;gap:30px}
+.contact-list{display:flex;flex-direction:column;gap:2px}
+.contact-row{display:flex;gap:14px;align-items:flex-start;padding:11px 0;border-top:1px solid var(--line-soft)}
+.contact-row:first-child{border-top:none}
+.contact-row .ci{width:34px;height:34px;border-radius:9px;background:var(--brand-tint);color:var(--brand);display:grid;place-items:center;font-size:16px;flex:none}
+.contact-row .cl{font-family:"IBM Plex Mono";font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.contact-row .cv{font-size:15.5px;color:var(--ink);font-weight:500}
+.contact-row .cv a{font-weight:500}
+.social{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.social a{font-family:"IBM Plex Mono";font-size:12.5px;padding:6px 12px;border:1px solid var(--line);border-radius:8px;color:var(--ink-soft);background:var(--panel)}
+.social a:hover{border-color:var(--brand);color:var(--brand);text-decoration:none}
+.epixs-card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px}
+.epixs-card .badge{display:inline-flex;align-items:center;gap:11px;margin-bottom:14px}
+.epixs-card .badge .m{width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,#14508c,#0f3e6e);color:#fff;display:grid;place-items:center;font-family:"Archivo";font-weight:800;font-size:15px}
+.epixs-card .badge .n{font-family:"Archivo";font-weight:800;font-size:17px;letter-spacing:.01em}
+.epixs-card .badge .n small{display:block;font-family:"IBM Plex Mono";font-weight:400;font-size:10px;letter-spacing:.13em;color:var(--muted);text-transform:uppercase}
+.epixs-card ul{margin:8px 0 0;padding-left:18px;color:var(--ink-soft);font-size:14.5px;line-height:1.7}
+
+.doc-foot{max-width:1180px;margin:0 auto;padding:30px 40px 60px;color:var(--muted);font-size:13px;font-family:"IBM Plex Mono";display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px}
+
+/* ---------- Responsive ---------- */
+@media (max-width:900px){
+  .wrap{grid-template-columns:1fr;gap:0;padding:0 22px}
+  .toc{position:static;max-height:none;padding:26px 0 6px;border-bottom:1px solid var(--line)}
+  .toc ol{columns:2;column-gap:18px}
+  .content{padding:26px 0}
+  .cover-inner{padding:48px 24px 42px}
+  .grid2{grid-template-columns:1fr}
+  .support .body{grid-template-columns:1fr;gap:22px}
+  .doc-foot{padding:26px 22px 50px}
+}
+@media (max-width:520px){
+  body{font-size:16px}
+  .toc ol{columns:1}
+  ol.steps li{padding-left:34px}
+}
+@media print{
+  html,body{background:#fff}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  .toc{display:none}
+  .wrap{grid-template-columns:1fr;display:block;gap:0}
+  .content{padding-top:14px}
+  .feat,.note,.table-wrap,.support,.epixs-card{break-inside:avoid}
+  .section>h2{break-after:avoid}
+  h3.sub{break-after:avoid}
+  body{font-size:12.5px}
+}
+</style>
+
+<header class="cover">
+  <div class="grid-bg"></div>
+  <div class="cover-inner">
+    <div class="cover-badge">
+      <div class="mark">🏗️</div>
+      <div class="mark-txt">DNK POWER CONMIX<small>Ready Mix Concrete · V.Kota, A.P.</small></div>
+    </div>
+    <div class="eyebrow">Project Documentation &amp; User Guide</div>
+    <h1>DNK RMC Billing &amp; Plant Management System</h1>
+    <p class="lede">A complete, cloud-synced system to run a Ready Mix Concrete plant — GST invoicing, dispatch, inventory, staff payroll and tax reporting — built for the team at DNK Power Conmix.</p>
+    <div class="meta-row">
+      <span class="meta-chip"><span class="dot"></span> Live at <b>dnk-rmc.web.app</b></span>
+      <span class="meta-chip">Version <b>1.0</b></span>
+      <span class="meta-chip">September 2026</span>
+      <span class="meta-chip">By <b>EPIXS Media</b></span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <nav class="toc" aria-label="Contents">
+    <h5>Contents</h5>
+    <ol>
+      <li><a href="#overview">Overview &amp; access</a></li>
+      <li><a href="#login">Logging in &amp; roles</a></li>
+      <li><a href="#dashboard">Dashboard</a></li>
+      <li><a href="#billing">Billing &amp; invoices</a></li>
+      <li><a href="#plant">Plant &amp; staff</a></li>
+      <li><a href="#sales">Sales tools</a></li>
+      <li><a href="#masters">Master data</a></li>
+      <li><a href="#reports">Reports &amp; GST</a></li>
+      <li><a href="#admin">Admin &amp; no-code setup</a></li>
+      <li><a href="#platform">Sync, security &amp; mobile</a></li>
+      <li><a href="#recipes">Quick how-to recipes</a></li>
+      <li><a href="#support">Support &amp; contact</a></li>
+    </ol>
+  </nav>
+
+  <main class="content">
+
+    <!-- 1 -->
+    <section class="section" id="overview">
+      <div class="sec-num">Section 01</div>
+      <h2>Overview &amp; access</h2>
+      <p class="intro">The DNK RMC system replaces paper registers and spreadsheets with one web application that every authorised staff member can open from any device. Everything — bills, payments, stock, attendance and reports — lives in one place and stays in sync automatically.</p>
+
+      <h3 class="sub">What the system does</h3>
+      <p>It handles the full cycle of a concrete plant: raise a GST-correct tax invoice for each dispatch, track who owes money, manage raw-material stock and vendor purchases, run staff attendance and salary, and hand your accountant ready-made GST reports. It works online across all your computers and phones, and keeps working even if the internet drops.</p>
+
+      <div class="grid2">
+        <div class="feat">
+          <div class="feat-head"><div class="feat-ic">🌐</div><h4>How to open it</h4></div>
+          <p class="what">Open any modern browser (Chrome, Edge, Safari) on a computer or phone and go to the address below. No installation needed.</p>
+          <span class="howto-label">Address</span>
+          <p style="margin:0"><a href="https://dnk-rmc.web.app" class="path" style="font-size:15px">https://dnk-rmc.web.app</a></p>
+        </div>
+        <div class="feat">
+          <div class="feat-head"><div class="feat-ic">🧩</div><h4>How it's organised</h4></div>
+          <p class="what">A menu on the left groups every screen into five areas so you always know where to look:</p>
+          <ul style="margin:10px 0 0;padding-left:18px;color:var(--ink-soft);font-size:15px;line-height:1.7">
+            <li><b>Operations</b> — dashboard, billing, outstanding</li>
+            <li><b>Plant &amp; Staff</b> — stock, vendors, attendance, payroll</li>
+            <li><b>Sales Tools</b> — leads &amp; calculators</li>
+            <li><b>Masters</b> — customers, grades, rates</li>
+            <li><b>Insights</b> — reports, users, settings</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2 -->
+    <section class="section" id="login">
+      <div class="sec-num">Section 02</div>
+      <h2>Logging in &amp; user roles</h2>
+      <p class="intro">Each person signs in with their own username and password. What they can see and change depends on their role, so the right people get the right access.</p>
+
+      <div class="feat">
+        <div class="feat-head"><div class="feat-ic">🔑</div><h4>Signing in</h4></div>
+        <span class="howto-label">How to use</span>
+        <ol class="steps">
+          <li>Open <span class="path">dnk-rmc.web.app</span> — the login screen appears.</li>
+          <li>Enter your <b>username</b> (or email) and <b>password</b>, then press <span class="kbd">Enter</span> or click <b>Sign In</b>.</li>
+          <li>Forgot your password? Click <b>Forgot password?</b> and answer your security question to reset it.</li>
+          <li>Use the <b>eye icon</b> in the password box to check what you typed.</li>
+        </ol>
+      </div>
+
+      <h3 class="sub">The three roles</h3>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Role</th><th>Username</th><th>What they can do</th></tr></thead>
+          <tbody>
+            <tr><td><span class="pill b">Admin</span></td><td><span class="mono">admin</span></td><td>Full access — every module, plus user management, settings, no-code customisation and feature toggles.</td></tr>
+            <tr><td><span class="pill g">Accountant</span></td><td><span class="mono">accountant</span></td><td>Day-to-day billing and operations. Cannot open admin-only settings.</td></tr>
+            <tr><td><span class="pill r">Auditor</span></td><td><span class="mono">auditor</span></td><td><b>Read-only</b> — can view and download everything but cannot edit or delete.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note warn">
+        <b class="tag">Change your password first</b>
+        Your initial passwords were provided separately by EPIXS Media. For security, sign in and change the Admin password immediately, and don't share the Admin login. Roles and passwords are managed in <span class="path">Users &amp; Permissions</span>.
+      </div>
+    </section>
+
+    <!-- 3 -->
+    <section class="section" id="dashboard">
+      <div class="sec-num">Section 03</div>
+      <h2>Dashboard</h2>
+      <p class="intro">The first screen after login. It gives you the day's picture at a glance so you know exactly where things stand before doing anything else.</p>
+      <div class="feat">
+        <div class="feat-head"><div class="feat-ic">📊</div><h4>What you see</h4></div>
+        <p class="what">Live figures that update as you work:</p>
+        <ul style="margin:10px 0 0;padding-left:18px;color:var(--ink-soft);font-size:15.5px;line-height:1.75">
+          <li><b>Today's dispatch</b> — total cubic metres billed today.</li>
+          <li><b>This month's sales</b> — running monthly revenue.</li>
+          <li><b>Outstanding</b> — total money still to be collected, and how many customers owe it.</li>
+          <li><b>Recent invoices</b> — the latest bills, click any to reprint.</li>
+          <li><b>Low-stock alerts</b> — materials at or below their reorder level.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- 4 -->
+    <section class="section" id="billing">
+      <div class="sec-num">Section 04</div>
+      <h2>Billing &amp; invoices</h2>
+      <p class="intro">The heart of the system. Raise a GST-correct tax invoice for every concrete dispatch, keep them all searchable, and track exactly who still owes money.</p>
+
+      <div class="feat">
+        <div class="feat-head"><div class="feat-ic">➕</div><h4>New Dispatch / Bill</h4></div>
+        <p class="what">Creates a tax invoice. GST is worked out automatically from the customer's GSTIN and state — you never calculate tax by hand.</p>
+        <span class="howto-label">How to use</span>
+        <ol class="steps">
+          <li>Go to <span class="path">Operations → New Dispatch / Bill</span>.</li>
+          <li>Pick the <b>Customer</b>. The system detects the tax type: <b>CGST + SGST</b> within Andhra Pradesh, <b>IGST</b> for other states, or <b>No GST</b> for an unregistered buyer.</li>
+          <li>Choose the <b>Site/Project</b> (optional), <b>Concrete Grade</b>, and <b>Vehicle &amp; Driver</b>.</li>
+          <li>Enter <b>Quantity (Cum)</b> and <b>Rate</b> — the rate auto-fills if set in the Rate Master. <em>(For a <b>PUMP</b> grade these two are optional.)</em></li>
+          <li>Optional: add <b>Pump Charges</b> and tick <b>Apply GST on pump</b> if they're taxable.</li>
+          <li>Check the live <b>Invoice Summary</b> on the right — taxable value, GST and grand total, plus the amount in words.</li>
+          <li>Click <b>Generate Invoice &amp; PDF</b>. The invoice opens ready to print or save as PDF, and is stored under Invoices.</li>
+        </ol>
+        <div class="note tip"><b class="tag">Good to know</b> Invoice numbers are assigned automatically (DNK/1, DNK/2 …) and stay fixed for registered buyers. For unregistered buyers the number is editable if you need to match a manual book.</div>
+      </div>
+
+      <div class="grid2">
+        <div class="feat">
+          <div class="feat-head"><div class="feat-ic">🧾</div><h4>Invoices</h4></div>
+          <p class="what">Every bill you've raised, in one searchable list.</p>
+          <span class="howto-label">How to use</span>
+          <ol class="steps">
+            <li>Open <span class="path">Operations → Invoices</span>.</li>
+            <li>Filter by <b>search</b>, <b>customer</b>, or a <b>date range</b> (From / To).</li>
+            <li>Use the row actions to <b>edit</b>, <b>delete</b>, print the <b>Tax Invoice</b> or <b>Batch Slip</b>, or a customer <b>Statement</b>.</li>
+            <li>Export the whole list to Excel/CSV from the row or from Reports.</li>
+          </ol>
+        </div>
+        <div class="feat">
+          <div class="feat-head"><div class="feat-ic">💰</div><h4>Outstanding</h4></div>
+          <p class="what">Track pending bills and record collections.</p>
+          <span class="howto-label">How to use</span>
+          <ol class="steps">
+            <li>Open <span class="path">Operations → Outstanding</span>.</li>
+            <li>Find the bill under <b>Pending Bills</b>.</li>
+            <li>Record a <b>payment</b> — amount, mode and date.</li>
+            <li>The balance updates instantly and the entry appears, time-stamped, under <b>Recent Payments</b>.</li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <!-- 5 -->
+    <section class="section" id="plant">
+      <div class="sec-num">Section 05</div>
+      <h2>Plant &amp; staff</h2>
+      <p class="intro">Everything behind the invoice — raw materials, vendors, vehicles, and the people who run the plant.</p>
+
+      <div class="grid2">
+        <div class="feat">
+          <div class="feat-head"><div class="feat-ic">📦</div><h4>Product Inventory</h4></div>
+          <p class="what">A stock register for cement, aggregates, sand, admixtures and more.</p>
+          <span class="howto-label">How to use</span>
+          <ol class="steps">
+            <li>Open <span class="path">Plant &amp; Staff → Product Inventory</span>.</li>
+            <li>Add a product with its <b>opening stock</b>, <b>unit</b> and <b>reorder level</b>.</li>
+            <li>Recording a vendor <b>purchase</b> adds stock automatically; use <b>Stock Out</b> for usage.</li>
+            <li>Items at or below reorder show a red <b>LOW</b> tag and a dashboard alert.</li>
+          </ol>
+        </div>
+        <div class="feat">
+          <div class="feat-head"><div class="feat-ic">🚛</div><h4>Vendors &amp; Purchases</h4></div>
+          <p class="what">Supplier records and every purchase you make.</p>
+          <span class="howto-label">How to use</span>
+          <ol class="steps">
+            <li>Open <span class="path">Plant &amp; Staff → Vendors &amp; Purchases</span>.</li>
+            <li>Add a vendor (name, GSTIN, phone).</li>
+            <li>Record a purchase and link it to a product to top up stock.</li>
+            <li>Filter purchases by date range and export.</li>
+          </ol>
+        </div>
+        <div class="feat">
+          <div class="feat-head"><div class="feat-ic">🧱</div><h4>Materials Received</h4></div>
+          <p class="what">An inward log of materials arriving at the plant.</p>
+          <span class="howto-label">How to use</span>
+          <ol class="steps">
+            <li>Open <span class="path">Plant &amp; Staff → Materials Received</span>.</li>
+            <li>Add an entry — date, material type, quantity, note.</li>
+            <li>Print or export the summary when needed.</li>
+          </ol>
+        </div>
+        <div class="feat">
+          <div class="feat-head"><div class="feat-ic">🛢️</div><h4>Vehicle Log</h4></div>
+          <p class="what">Track running and fuel for each transit mixer / tipper.</p>
+          <span class="howto-label">How to use</span>
+          <ol class="steps">
+            <li>Open <span class="path">Plant &amp; Staff → Vehicle Log</span>.</li>
+            <li>Enter the opening and closing meter readings and fuel.</li>
+            <li>Distance is calculated for you; export any time.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="feat">
+        <div class="feat-head"><div class="feat-ic">👷</div><h4>Staff Attendance &amp; Payroll</h4></div>
+        <p class="what">Mark daily attendance and let the system work out salary from it.</p>
+        <span class="howto-label">How to use</span>
+        <ol class="steps">
+          <li>Open <span class="path">Plant &amp; Staff → Staff Attendance</span>. For each person mark <b>P</b> (present), <b>A</b> (absent), <b>H</b> (half-day) or <b>L</b> (leave) — or use <b>Mark All Present</b>. Future dates and pre-joining dates are blocked automatically.</li>
+          <li>Open <span class="path">Salary / Payroll</span>. Pay is calculated from attendance: <b>Absent = unpaid</b>, and <b>Leave = paid</b> up to the monthly allowance (only extra leave becomes loss-of-pay).</li>
+          <li>Record <b>advances</b> — you're warned if an advance exceeds the salary due.</li>
+          <li>Print a <b>payslip</b> for any employee.</li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- 6 -->
+    <section class="section" id="sales">
+      <div class="sec-num">Section 06</div>
+      <h2>Sales tools</h2>
+      <p class="intro">Helpers for winning and quoting work.</p>
+      <div class="grid2">
+        <div class="feat">
+          <div class="feat-head"><div class="feat-ic">🎯</div><h4>Leads &amp; Follow-up</h4></div>
+          <p class="what">A simple pipeline for enquiries.</p>
+          <span class="howto-label">How to use</span>
+          <ol class="steps">
+            <li>Open <span class="path">Sales Tools → Leads &amp; Follow-up</span>.</li>
+            <li>Add a lead with its stage (New → Contacted → Quoted → Won / Lost) and next follow-up date.</li>
+            <li>Track pipeline value and what to chase next.</li>
+          </ol>
+        </div>
+        <div class="feat">
+          <div class="feat-head"><div class="feat-ic">📐</div><h4>Concrete &amp; Revenue Calculators</h4></div>
+          <p class="what">Quick on-the-spot estimates.</p>
+          <span class="howto-label">How to use</span>
+          <ol class="steps">
+            <li><b>Concrete Calculator</b> — enter a volume to estimate the material needed.</li>
+            <li><b>Revenue Calculator</b> — check costing and margin before quoting a rate.</li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <!-- 7 -->
+    <section class="section" id="masters">
+      <div class="sec-num">Section 07</div>
+      <h2>Master data</h2>
+      <p class="intro">Set these up once and the rest of the system fills itself in. Anything you enter here appears in the dropdowns on the billing screens.</p>
+      <div class="feat">
+        <div class="feat-head"><div class="feat-ic">🗂️</div><h4>The five masters</h4></div>
+        <ul style="margin:6px 0 0;padding-left:18px;color:var(--ink-soft);font-size:15.5px;line-height:1.8">
+          <li><b>Customers</b> — name, GSTIN (validated), state and address. Drives automatic GST.</li>
+          <li><b>Sites / Projects</b> — delivery sites linked to customers.</li>
+          <li><b>Vehicles &amp; Drivers</b> — transit mixers, tippers and drivers.</li>
+          <li><b>Concrete Grades</b> — M10, M20, M25 … each with its HSN/SAC and mix design.</li>
+          <li><b>Rate Master</b> — the agreed rate per customer × grade, so bills price themselves.</li>
+        </ul>
+        <span class="howto-label">How to use</span>
+        <ol class="steps">
+          <li>Open the item under <span class="path">Masters</span>.</li>
+          <li>Click <b>Add</b>, fill the form, and save. GSTIN and phone numbers are checked for you.</li>
+          <li>Edit or remove any record from its row.</li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- 8 -->
+    <section class="section" id="reports">
+      <div class="sec-num">Section 08</div>
+      <h2>Reports &amp; GST</h2>
+      <p class="intro">Turn your data into the files your accountant and tax filing need — in the exact formats they expect.</p>
+      <div class="feat">
+        <div class="feat-head"><div class="feat-ic">📈</div><h4>Reports &amp; Export</h4></div>
+        <p class="what">All exports live in one place under <span class="path">Insights → Reports &amp; Export</span>.</p>
+        <span class="howto-label">What you can download</span>
+        <ul style="margin:6px 0 0;padding-left:18px;color:var(--ink-soft);font-size:15.5px;line-height:1.8">
+          <li><b>All Invoices (Excel/CSV)</b> — with separate CGST, SGST and IGST columns, so it works for both intra- and inter-state tax.</li>
+          <li><b>Monthly Summary</b> — bills, quantity, taxable, GST and total per month.</li>
+          <li><b>GSTR Sales Register (Tally)</b> — pick a month; downloads in Tally's exact layout (D-Mon-YY dates, Dr/Cr, Grand Total) so your accountant can use it directly.</li>
+          <li><b>Toll / Dispatch Register</b> and <b>Bulk Invoice ZIP</b> for a whole customer or period.</li>
+        </ul>
+        <span class="howto-label">How to export the GST register</span>
+        <ol class="steps">
+          <li>Open <span class="path">Reports &amp; Export</span>.</li>
+          <li>Choose the <b>month</b> next to <em>GST Register</em>.</li>
+          <li>Click <b>GSTR Sales Register (Tally)</b> — the file downloads ready to hand over.</li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- 9 -->
+    <section class="section" id="admin">
+      <div class="sec-num">Section 09</div>
+      <h2>Admin &amp; no-code setup</h2>
+      <p class="intro">The Admin can shape the system without any programming — add options, turn modules on or off, manage users, import history and back everything up. All of this lives in <span class="path">Settings &amp; Backup</span> and <span class="path">Users &amp; Permissions</span>.</p>
+
+      <div class="feat">
+        <div class="feat-head"><div class="feat-ic">🧩</div><h4>Manage Lists &amp; Options — no coding</h4></div>
+        <p class="what">Change the choices that appear in dropdowns across the app yourself. Great when you add a new material or a new lead stage.</p>
+        <span class="howto-label">How to use</span>
+        <ol class="steps">
+          <li>Open <span class="path">Settings → Manage Lists &amp; Options</span>.</li>
+          <li>Pick a list — Dispatched Through, Product Categories, Units, Material Types or Lead Stages.</li>
+          <li><b>Add</b>, <b>rename</b> or <b>remove</b> options; <b>Reset to default</b> restores the originals.</li>
+          <li>Changes apply instantly and sync to every device. Existing records keep their saved value even if you later remove an option.</li>
+        </ol>
+      </div>
+
+      <div class="grid2">
+        <div class="feat">
+          <div class="feat-head"><div class="feat-ic">🎚️</div><h4>Feature Management</h4></div>
+          <p class="what">Show or hide whole modules for everyone.</p>
+          <span class="howto-label">How to use</span>
+          <ol class="steps">
+            <li>Open <span class="path">Settings → Feature Management</span>.</li>
+            <li>Toggle any module on or off — it appears or disappears from every user's menu at once (core screens stay on).</li>
+          </ol>
+        </div>
+        <div class="feat">
+          <div class="feat-head"><div class="feat-ic">👥</div><h4>Users &amp; Permissions</h4></div>
+          <p class="what">Create logins and decide exactly what each can touch.</p>
+          <span class="howto-label">How to use</span>
+          <ol class="steps">
+            <li>Open <span class="path">Insights → Users &amp; Permissions</span>.</li>
+            <li>Add a user, choose a role, and tick the modules they may use.</li>
+            <li>Disable a login any time without deleting its history.</li>
+          </ol>
+        </div>
+      </div>
+
+      <div class="feat">
+        <div class="feat-head"><div class="feat-ic">⬆️</div><h4>Import your history (April 2026 onward)</h4></div>
+        <p class="what">Bring older records in from a spreadsheet instead of retyping them.</p>
+        <span class="howto-label">How to use</span>
+        <ol class="steps">
+          <li>Open <span class="path">Settings → Import Data</span>.</li>
+          <li>Choose a module — Invoices/Sales, Materials, Vehicle Log, Customers, Vendors, Staff or Products.</li>
+          <li>Click <b>Download Template</b>, fill it in, and save as <b>CSV or Excel (.xlsx)</b>.</li>
+          <li>Choose your file and click <b>Import</b>. Customers, vendors, grades and vehicles are created for you, GST on invoices is calculated automatically, and duplicates are skipped.</li>
+        </ol>
+        <div class="note tip"><b class="tag">Tip</b> CSV files import fully offline; Excel (.xlsx) import needs an internet connection at the moment you import.</div>
+      </div>
+
+      <div class="feat">
+        <div class="feat-head"><div class="feat-ic">💾</div><h4>Backup &amp; company details</h4></div>
+        <span class="howto-label">How to use</span>
+        <ol class="steps">
+          <li>Open <span class="path">Settings &amp; Backup</span>.</li>
+          <li>Edit <b>Company Details</b> (name, GSTIN, address, bank) — these print on every invoice.</li>
+          <li>Click <b>Download Backup (.json)</b> to save a full copy; <b>Restore</b> brings it back on any computer.</li>
+        </ol>
+        <div class="note tip"><b class="tag">Recommended</b> Download a backup weekly and keep it somewhere safe, in addition to the automatic cloud sync.</div>
+      </div>
+    </section>
+
+    <!-- 10 -->
+    <section class="section" id="platform">
+      <div class="sec-num">Section 10</div>
+      <h2>Sync, security &amp; mobile</h2>
+      <p class="intro">The system is built to be safe, always up to date, and usable from the plant on a phone.</p>
+      <div class="grid2">
+        <div class="feat">
+          <div class="feat-head"><div class="feat-ic">☁️</div><h4>Real-time cloud sync</h4></div>
+          <p class="what">Log in on two computers and both stay in step — a bill raised on one appears on the other within seconds. A small badge shows <b>Synced</b>, <b>Connecting</b> or <b>Local only</b>. If the internet drops, the app keeps working and syncs again when it returns.</p>
+        </div>
+        <div class="feat">
+          <div class="feat-head"><div class="feat-ic">🔒</div><h4>Security</h4></div>
+          <p class="what">Sign-in required, role-based access, validated GST and phone entries, and hardening against malicious data and scripts (Content-Security-Policy and input escaping). Invoices print clean on A4 with no browser clutter.</p>
+        </div>
+        <div class="feat">
+          <div class="feat-head"><div class="feat-ic">📱</div><h4>Mobile ready</h4></div>
+          <p class="what">On a phone the menu becomes a slide-in drawer (tap ☰), wide tables scroll neatly, and forms stack to one column — so you can raise a bill or check outstanding from the site.</p>
+        </div>
+        <div class="feat">
+          <div class="feat-head"><div class="feat-ic">⚡</div><h4>Fast &amp; lightweight</h4></div>
+          <p class="what">The whole app is a single lightweight page that loads quickly and puts almost no load on the server, so it stays responsive even on modest connections.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- 11 -->
+    <section class="section" id="recipes">
+      <div class="sec-num">Section 11</div>
+      <h2>Quick how-to recipes</h2>
+      <p class="intro">The everyday jobs, boiled down to the shortest path.</p>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>I want to…</th><th>Do this</th></tr></thead>
+          <tbody>
+            <tr><td>Raise a concrete bill</td><td><span class="path">New Dispatch / Bill</span> → pick customer, grade, vehicle → qty &amp; rate → <b>Generate Invoice &amp; PDF</b></td></tr>
+            <tr><td>Record a payment received</td><td><span class="path">Outstanding</span> → find the bill → record amount, mode, date</td></tr>
+            <tr><td>Re-print an old invoice</td><td><span class="path">Invoices</span> → search → Tax Invoice / Batch Slip</td></tr>
+            <tr><td>Give my accountant GST data</td><td><span class="path">Reports &amp; Export</span> → choose month → <b>GSTR Sales Register (Tally)</b></td></tr>
+            <tr><td>Add a new material or lead stage</td><td><span class="path">Settings → Manage Lists &amp; Options</span> → Add</td></tr>
+            <tr><td>Import old bills from Excel</td><td><span class="path">Settings → Import Data</span> → download template → fill → Import</td></tr>
+            <tr><td>Mark attendance &amp; run salary</td><td><span class="path">Staff Attendance</span> → mark P/A/H/L → <span class="path">Salary / Payroll</span></td></tr>
+            <tr><td>Add a staff login</td><td><span class="path">Users &amp; Permissions</span> → Add user → pick role &amp; permissions</td></tr>
+            <tr><td>Back up everything</td><td><span class="path">Settings &amp; Backup</span> → Download Backup (.json)</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- 12 support -->
+    <section class="section" id="support" style="border-top:none">
+      <div class="support">
+        <div class="top">
+          <div class="eyebrow">Development &amp; Support Partner</div>
+          <h2>EPIXS Media</h2>
+          <p>This system was designed, built and is maintained by EPIXS Media — a web, software and digital-marketing agency. For any change, question or support, reach us any time.</p>
+        </div>
+        <div class="body">
+          <div class="contact-list">
+            <div class="contact-row"><div class="ci">📞</div><div><div class="cl">Phone</div><div class="cv"><a href="tel:+919441109327">+91 94411 09327</a></div></div></div>
+            <div class="contact-row"><div class="ci">✉️</div><div><div class="cl">Email</div><div class="cv"><a href="mailto:epixsmedia@gmail.com">epixsmedia@gmail.com</a></div></div></div>
+            <div class="contact-row"><div class="ci">💬</div><div><div class="cl">WhatsApp</div><div class="cv"><a href="https://wa.me/919441109327">wa.me/919441109327</a></div></div></div>
+            <div class="contact-row"><div class="ci">🌐</div><div><div class="cl">Website</div><div class="cv"><a href="https://epixs.in">epixs.in</a></div></div></div>
+            <div class="contact-row"><div class="ci">📍</div><div><div class="cl">Office</div><div class="cv">Shree Vignesh Towers, Flat No. 105, D.No 18-8-40D, Leela Mahal Circle, Madura Nagar, Tirupati, Andhra Pradesh 517501</div></div></div>
+            <div class="contact-row"><div class="ci">🕘</div><div><div class="cl">Hours</div><div class="cv">Monday – Saturday · 9:30 AM – 6:30 PM IST</div></div></div>
+          </div>
+          <div class="epixs-card">
+            <div class="badge"><div class="m">EM</div><div class="n">EPIXS Media<small>Web · Software · Marketing</small></div></div>
+            <p style="margin:0;color:var(--ink-soft);font-size:14.5px">Results-driven partner helping businesses get online, get found and get more customers.</p>
+            <ul>
+              <li>Web &amp; software development</li>
+              <li>Mobile &amp; e-commerce apps</li>
+              <li>AI, automation &amp; analytics</li>
+              <li>Digital marketing &amp; hosting</li>
+            </ul>
+            <div class="social">
+              <a href="https://facebook.com/EpixsMedia/">Facebook</a>
+              <a href="https://instagram.com/epixsmedia/">Instagram</a>
+              <a href="https://linkedin.com/company/epixs-media">LinkedIn</a>
+              <a href="https://x.com/epixsmedia">X</a>
+              <a href="https://youtube.com/@epixsmedia">YouTube</a>
+              <a href="https://github.com/EPIXSMedia">GitHub</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<footer class="doc-foot">
+  <span>DNK Power Conmix — RMC Billing System · Documentation v1.0</span>
+  <span>© 2026 EPIXS Media · Prepared September 2026</span>
+</footer>

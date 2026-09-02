@@ -8,12 +8,20 @@ const app = fs.readFileSync('app.js','utf8');
 // guard: template strings must not contain a literal </script>
 [assets,print,app].forEach((s,i)=>{ if(/<\/script>/i.test(s)) throw new Error('literal </script> in file '+i); });
 
+// Bundle the App Manual (docs page) as window.MANUAL_HTML for the in-app Manual
+// screen. Wrap the docs fragment as a full document and escape every '<' as <
+// so the embedded HTML can never break out of the surrounding <script> block.
+const manualRaw = fs.readFileSync('../docs/DNK-RMC-Documentation.html','utf8');
+const manualDoc = '<!doctype html>\n<html lang="en">\n'+manualRaw+'\n</html>';
+const manualJs = 'window.MANUAL_HTML='+JSON.stringify(manualDoc).replace(/</g,'\\u003c')+';';
+
 const body = `<style>
 ${css}
 </style>
 <div id="root"></div>
 <script>
 ${assets}
+${manualJs}
 ${print}
 ${app}
 </script>`;
