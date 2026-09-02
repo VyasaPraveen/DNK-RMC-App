@@ -1,6 +1,8 @@
 /* ============ Invoice / Challan print templates (Tally-style GST invoice) ============ */
 
 function inr(n){ return Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}); }
+/* Title-case a unit-of-measure for display, e.g. CUM/cum -> Cum, job -> Job */
+function tcase(s){ return String(s||'').toLowerCase().replace(/\b\w/g,m=>m.toUpperCase()); }
 
 /* ---- Number to Indian words with paisa ---- */
 function numToWords(num){
@@ -77,7 +79,7 @@ function invoiceHTML(inv, company, opts){
     *{box-sizing:border-box}
     html,body{margin:0}
     body{font-family:"Segoe UI",Arial,sans-serif;color:#111;font-size:11px;padding:12mm}
-    .doc{border:1.2px solid #000}
+    .doc{border:1px solid #000}
     .title{text-align:center;font-weight:700;padding:5px;font-size:13px;position:relative}
     .title .copy{position:absolute;right:6px;top:5px;font-size:9px;font-weight:400;color:#555}
     table{border-collapse:collapse;width:100%}
@@ -102,7 +104,7 @@ function invoiceHTML(inv, company, opts){
     <div class="title">${isChallan?'DELIVERY CHALLAN':(c.noGst?'INVOICE / BILL OF SUPPLY':'TAX INVOICE')}<span class="copy">${isChallan?'':'(ORIGINAL FOR RECIPIENT)'}</span></div>
     <table class="head">
       <tr>
-        <td style="width:55%" rowspan="4" class="seller">
+        <td style="width:50%" rowspan="4" class="seller">
           <img src="${window.LOGO_DATA||''}" class="logo">
           <b>M/S ${esc(company.name)}</b><br>
           ${company.addressLines.map(l=>`<span class="small">${esc(l)}</span>`).join('<br>')}<br>
@@ -110,8 +112,8 @@ function invoiceHTML(inv, company, opts){
           <span class="small">State Name: ${esc(company.stateName)}, Code: ${esc(company.stateCode)}</span><br>
           <span class="small">E-Mail: ${esc(company.email)}</span>
         </td>
-        <td style="width:22%">Invoice No.<br><b>${esc(inv.no)}</b></td>
-        <td style="width:23%">Dated<br><b>${fmtDate(inv.date)}</b></td>
+        <td style="width:25%">Invoice No.<br><b>${esc(inv.no)}</b></td>
+        <td style="width:25%">Dated<br><b>${fmtDate(inv.date)}</b></td>
       </tr>
       <tr><td>Delivery Note<br>${esc(inv.no)}</td><td>Mode/Terms of Payment<br>${esc(inv.terms)||'Immediate'}</td></tr>
       <tr><td>Dispatched through<br><b>${esc(inv.dispatchThrough)||'Transit Mixer'}</b></td><td>Motor Vehicle No.<br><b>${esc(inv.vehicle)}</b></td></tr>
@@ -140,9 +142,9 @@ function invoiceHTML(inv, company, opts){
         </td>
         <td class="c">${esc(inv.hsn)}</td>
         <td class="c">${c.noGst?'—':c.gstRate+'%'}</td>
-        <td class="r">${inv.qty.toFixed(2)} ${inv.unit}</td>
+        <td class="r">${inv.qty.toFixed(2)} ${tcase(inv.unit)}</td>
         <td class="r">${inr(inv.rate)}</td>
-        <td class="c">${inv.unit}</td>
+        <td class="c">${tcase(inv.unit)}</td>
         <td class="r b">${inr(c.taxable)}</td>
       </tr>
       ${c.pump>0?`<tr>
@@ -152,10 +154,10 @@ function invoiceHTML(inv, company, opts){
         <td class="c">${c.pumpGst?c.gstRate+'%':'—'}</td>
         <td class="r">—</td>
         <td class="r">${inr(c.pump)}</td>
-        <td class="c">job</td>
+        <td class="c">Job</td>
         <td class="r b">${inr(c.pump)}</td>
       </tr>`:''}
-      <tr><td colspan="4" class="r b">Total</td><td class="r b">${inv.qty.toFixed(2)} ${inv.unit}</td><td colspan="2"></td><td class="r b">₹ ${inr(c.grand)}</td></tr>
+      <tr><td colspan="4" class="r b">Total</td><td class="r b">${inv.qty.toFixed(2)} ${tcase(inv.unit)}</td><td colspan="2"></td><td class="r b">₹ ${inr(c.grand)}</td></tr>
     </table>
     <div class="words">Amount Chargeable (in words):&nbsp; ${numToWords(c.grand)} <span style="float:right;font-weight:400">E. &amp; O.E</span></div>
     ${c.noGst
