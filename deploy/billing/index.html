@@ -350,6 +350,15 @@ function invoiceHTML(inv, company, opts){
     table{border-collapse:collapse;width:100%}
     td,th{border:1px solid #000;padding:4px 6px;vertical-align:top}
     .noborder td{border:none}
+    /* Fixed column model so the header centre divider lines up exactly with the
+       items table's Description|HSN divider (both sit at 100% - 380px). */
+    .head,.items{table-layout:fixed}
+    /* One even 1px frame: the .doc border is the sole outer edge, so strip the
+       inner tables' outer perimeter (left/right) to avoid a doubled 2px line.
+       The header's centre divider and all internal grid lines are preserved. */
+    .doc>table>tbody>tr>td:last-child,.doc>table>tbody>tr>th:last-child{border-right:0}
+    .doc>table:not(.head)>tbody>tr>td:first-child,.doc>table:not(.head)>tbody>tr>th:first-child{border-left:0}
+    .head>tbody>tr:first-child>td:first-child,.head>tbody>tr:last-child>td:first-child{border-left:0}
     .r{text-align:right}.c{text-align:center}.b{font-weight:700}
     .head td{vertical-align:top}
     .seller b{font-size:12px}
@@ -369,7 +378,7 @@ function invoiceHTML(inv, company, opts){
     <div class="title">${isChallan?'DELIVERY CHALLAN':(c.noGst?'INVOICE / BILL OF SUPPLY':'TAX INVOICE')}<span class="copy">${isChallan?'':'(ORIGINAL FOR RECIPIENT)'}</span></div>
     <table class="head">
       <tr>
-        <td style="width:50%" rowspan="4" class="seller">
+        <td rowspan="4" class="seller">
           <img src="${window.LOGO_DATA||''}" class="logo">
           <b>M/S ${esc(company.name)}</b><br>
           ${company.addressLines.map(l=>`<span class="small">${esc(l)}</span>`).join('<br>')}<br>
@@ -377,8 +386,8 @@ function invoiceHTML(inv, company, opts){
           <span class="small">State Name: ${esc(company.stateName)}, Code: ${esc(company.stateCode)}</span><br>
           <span class="small">E-Mail: ${esc(company.email)}</span>
         </td>
-        <td style="width:25%">Invoice No.<br><b>${esc(inv.no)}</b></td>
-        <td style="width:25%">Dated<br><b>${fmtDate(inv.date)}</b></td>
+        <td style="width:190px">Invoice No.<br><b>${esc(inv.no)}</b></td>
+        <td style="width:190px">Dated<br><b>${fmtDate(inv.date)}</b></td>
       </tr>
       <tr><td>Delivery Note<br>${esc(inv.no)}</td><td>Mode/Terms of Payment<br>${esc(inv.terms)||'Immediate'}</td></tr>
       <tr><td>Dispatched through<br><b>${esc(inv.dispatchThrough)||'Transit Mixer'}</b></td><td>Motor Vehicle No.<br><b>${esc(inv.vehicle)}</b></td></tr>
@@ -426,7 +435,7 @@ function invoiceHTML(inv, company, opts){
     </table>
     <div class="words">Amount Chargeable (in words):&nbsp; ${numToWords(c.grand)} <span style="float:right;font-weight:400">E. &amp; O.E</span></div>
     ${c.noGst
-      ? `<div class="words small" style="border:1px solid #000;padding:6px">GST: <b>NOT APPLICABLE</b> &mdash; Buyer is Domestic / Unregistered (no GSTIN). Issued as a <b>Bill of Supply</b>. No tax charged on this transaction.</div>`
+      ? `<div class="words small" style="border-bottom:1px solid #000;padding:6px">GST: <b>NOT APPLICABLE</b> &mdash; Buyer is Domestic / Unregistered (no GSTIN). Issued as a <b>Bill of Supply</b>. No tax charged on this transaction.</div>`
       : `<table>
       ${taxSummaryHead}
       ${taxSummary}
