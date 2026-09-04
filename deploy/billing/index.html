@@ -357,12 +357,13 @@ function invoiceHTML(inv, company, opts){
     html,body{margin:0}
     /* A4 with a comfortable buffer so the whole invoice always fits on one page. */
     body{font-family:"Segoe UI",Arial,sans-serif;color:#111;font-size:12px;padding:9mm}
-    /* Fill the full printable A4 height: the framed document stretches to the page
-       and a flexible spacer (.fill) pushes the bank/signature block to the bottom.
-       min-height sits just under the 279mm printable area (297 - 2x9mm) so a hairline
-       rounding overflow can never spill onto a blank 2nd page. */
-    .doc{border:1px solid #000;display:flex;flex-direction:column;min-height:calc(297mm - 20mm)}
-    .fill{flex:1 1 auto}
+    /* The document sizes to its content (never forced to full page height) so the
+       bank details, signature and declaration always sit well inside the printable
+       area and never fall into the printer's non-printable bottom margin. */
+    .doc{border:1px solid #000}
+    /* A small, fixed breathing gap before the footer block — enough to separate it
+       from the tax section without pushing it down to the page edge. */
+    .fill{height:20px}
     .title{text-align:center;font-weight:700;padding:5px;font-size:13px;position:relative}
     .title .copy{position:absolute;right:6px;top:5px;font-size:9px;font-weight:400;color:#555}
     table{border-collapse:collapse;width:100%}
@@ -377,6 +378,9 @@ function invoiceHTML(inv, company, opts){
     .doc>table>tbody>tr>td:last-child,.doc>table>tbody>tr>th:last-child{border-right:0}
     .doc>table:not(.head)>tbody>tr>td:first-child,.doc>table:not(.head)>tbody>tr>th:first-child{border-left:0}
     .head>tbody>tr:first-child>td:first-child,.head>tbody>tr:last-child>td:first-child{border-left:0}
+    /* Where two tables stack directly (header -> items), drop the lower table's top
+       border so their junction is a single 1px line, never a doubled 2px one. */
+    .doc table+table>tbody>tr:first-child>td,.doc table+table>tbody>tr:first-child>th{border-top:0}
     .r{text-align:right}.c{text-align:center}.b{font-weight:700}
     .head td{vertical-align:top}
     .seller b{font-size:12px}
@@ -389,6 +393,9 @@ function invoiceHTML(inv, company, opts){
     .items td{padding-top:8px;padding-bottom:8px}
     .words{padding:5px 6px;font-weight:700}
     .bank td{border:none;padding:2px 5px}
+    /* Keep each bank-detail label on a single line (e.g. "Bank Name") so every
+       label:value pair stays on one row with the colons aligned. */
+    .bank td:first-child{white-space:nowrap}
     .sign{height:60px}
     .seller{padding:10px 12px}
     .seller-head{display:flex;gap:14px;align-items:center}
@@ -478,7 +485,7 @@ function invoiceHTML(inv, company, opts){
         <td style="width:50%" class="bank">
           <b>Company's Bank Details</b>
           <table style="margin-top:3px"><tbody class="bank">
-            <tr><td style="width:70px">Bank Name</td><td>: ${esc(company.bank.bank)}</td></tr>
+            <tr><td style="width:84px">Bank Name</td><td>: ${esc(company.bank.bank)}</td></tr>
             <tr><td>A/c Holder</td><td>: ${esc(company.bank.name)}</td></tr>
             <tr><td>A/c No.</td><td>: ${esc(company.bank.acno)}</td></tr>
             <tr><td>Branch</td><td>: ${esc(company.bank.branch)}</td></tr>
