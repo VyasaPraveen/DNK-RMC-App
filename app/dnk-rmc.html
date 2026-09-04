@@ -57,13 +57,19 @@ h1,h2,h3{letter-spacing:-.2px}
 .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;
   background:linear-gradient(135deg,#0f3e6e 0%,#14508c 55%,#1a5ea3 100%)}
 .login-split{display:flex;width:860px;max-width:100%;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 24px 70px rgba(8,22,40,.45)}
-/* Branding panel matches the logo's light-blue background (#05A2FD) so the logo
-   merges seamlessly into the panel — no radius/shadow tile edge around it. */
-.login-left{flex:1;background:#05A2FD;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:46px 34px;text-align:center;color:#fff}
+/* Branding panel: logo light-blue (#05A2FD) base dressed with a subtle,
+   professional pattern — a soft top-left glow, a deep-blue corner vignette and
+   fine diagonal pinstripes. Text is dark navy for strong, clear contrast. */
+.login-left{flex:1;background-color:#05A2FD;
+  background-image:
+    radial-gradient(circle at 16% 12%, rgba(255,255,255,.24), rgba(255,255,255,0) 46%),
+    radial-gradient(circle at 88% 104%, rgba(4,52,92,.28), rgba(4,52,92,0) 52%),
+    repeating-linear-gradient(135deg, rgba(6,46,80,.08) 0 1px, rgba(6,46,80,0) 1px 15px);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;padding:46px 34px;text-align:center;color:#082744}
 .login-left img{width:160px;height:160px;object-fit:contain;border-radius:0;box-shadow:none}
-.login-left h1{font-size:19px;margin:20px 0 4px;letter-spacing:.4px}
-.login-left .tag{color:var(--accent);font-weight:700;font-size:11px;letter-spacing:2px;text-transform:uppercase;text-shadow:0 1px 2px rgba(0,0,0,.18)}
-.login-left p{color:#eaf5ff;font-size:12px;margin:14px 0 0;line-height:1.7}
+.login-left h1{color:#082744;font-size:20px;font-weight:800;margin:20px 0 4px;letter-spacing:.4px}
+.login-left .tag{color:#0a2c4d;font-weight:800;font-size:11px;letter-spacing:2px;text-transform:uppercase}
+.login-left p{color:#123a60;font-size:12.5px;font-weight:600;margin:14px 0 0;line-height:1.7}
 .login-right{width:390px;max-width:100%;padding:48px 42px;display:flex;flex-direction:column;justify-content:center}
 .login-right h2{margin:0 0 5px;color:var(--text);font-size:24px;font-weight:700}
 .login-right .sub{color:var(--muted);font-size:13px;margin-bottom:26px}
