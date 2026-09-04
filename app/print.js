@@ -79,8 +79,13 @@ function invoiceHTML(inv, company, opts){
     *{box-sizing:border-box}
     html,body{margin:0}
     /* A4 with a comfortable buffer so the whole invoice always fits on one page. */
-    body{font-family:"Segoe UI",Arial,sans-serif;color:#111;font-size:11px;padding:9mm}
-    .doc{border:1px solid #000}
+    body{font-family:"Segoe UI",Arial,sans-serif;color:#111;font-size:12px;padding:9mm}
+    /* Fill the full printable A4 height: the framed document stretches to the page
+       and a flexible spacer (.fill) pushes the bank/signature block to the bottom.
+       min-height sits just under the 279mm printable area (297 - 2x9mm) so a hairline
+       rounding overflow can never spill onto a blank 2nd page. */
+    .doc{border:1px solid #000;display:flex;flex-direction:column;min-height:calc(297mm - 20mm)}
+    .fill{flex:1 1 auto}
     .title{text-align:center;font-weight:700;padding:5px;font-size:13px;position:relative}
     .title .copy{position:absolute;right:6px;top:5px;font-size:9px;font-weight:400;color:#555}
     table{border-collapse:collapse;width:100%}
@@ -104,14 +109,14 @@ function invoiceHTML(inv, company, opts){
     /* GST charge lines shown as their own rows, entirely bold */
     .items .gst-line td{font-weight:700}
     .items .desc{vertical-align:top}
-    .items td{padding-top:6px;padding-bottom:6px}
-    .words{padding:4px 6px;font-weight:700}
-    .bank td{border:none;padding:1px 5px}
-    .sign{height:52px}
+    .items td{padding-top:8px;padding-bottom:8px}
+    .words{padding:5px 6px;font-weight:700}
+    .bank td{border:none;padding:2px 5px}
+    .sign{height:60px}
     .seller{padding:10px 12px}
     .seller-head{display:flex;gap:14px;align-items:center}
     .seller-info{min-width:0}
-    .logo{width:72px;height:72px;object-fit:contain;flex:none;display:block}
+    .logo{width:80px;height:80px;object-fit:contain;flex:none;display:block}
     .qr{width:64px;height:64px}
     .foot{text-align:center;font-style:italic;padding:5px;font-size:10px}
     @media print{.noprint{display:none}}
@@ -190,6 +195,7 @@ function invoiceHTML(inv, company, opts){
       <tr class="b"><td class="r">Total</td><td class="r">${inr(c.baseTaxable)}</td>${c.interState?`<td></td><td class="r">${inr(c.igst)}</td>`:`<td></td><td class="r">${inr(c.cgst)}</td><td></td><td class="r">${inr(c.sgst)}</td>`}<td class="r">${inr(c.totalTax)}</td></tr>
     </table>
     <div class="words small">Tax Amount (in words): ${numToWords(c.totalTax)}</div>`}
+    <div class="fill"></div>
     <table>
       <tr>
         <td style="width:50%" class="bank">
