@@ -578,7 +578,7 @@ function renderApp(){
 }
 function topbar(title,sub,actions){
   const u=ME||{name:'Administrator',role:'Admin'};
-  return `<div class="topbar"><div><h2>${title}</h2><div class="sub">${sub||''}</div></div>
+  return `<div class="topbar"><div><h2>${esc(title)}</h2><div class="sub">${sub||''}</div></div>
     <div style="display:flex;gap:14px;align-items:center">
     ${actions||''}
     <div class="userchip">👤 <div><b>${esc(u.name)}</b><br><span>${esc(u.role)}${u.role==='Auditor'?' • read-only':''}</span></div>
@@ -590,7 +590,7 @@ function renderDashboard(){
   const invs=DB.invoices;
   const today=todayISO();
   const thisMonth=today.slice(0,7);
-  const monthInvs=invs.filter(i=>i.date.slice(0,7)===thisMonth);
+  const monthInvs=invs.filter(i=>(i.date||'').slice(0,7)===thisMonth);
   const todayInvs=invs.filter(i=>i.date===today);
   const todayCum=todayInvs.reduce((s,i)=>s+i.qty,0);
   const monthSales=monthInvs.reduce((s,i)=>s+invTotals(i).grand,0);
@@ -838,7 +838,7 @@ function renderInvoices(){
         <option value="">All customers</option>
         ${DB.customers.map(c=>`<option value="${c.id}" ${invCust===c.id?'selected':''}>${esc(c.name)}</option>`).join('')}
       </select>
-      <button class="btn ghost" onclick="exportInvoicesCSV(invCust)">⬇ Invoices CSV</button>
+      <button class="btn ghost" onclick="exportInvoicesCSV(invCust,invFrom,invTo)">⬇ Invoices CSV</button>
       <button class="btn ghost" onclick="zipModal()">🗜 Bulk ZIP</button>
       ${invCust?`<button class="btn ghost" onclick="exportTollCSV('${invCust}')">⬇ Toll Register</button>
         <button class="btn ghost" onclick="printStatement('${invCust}')">🖨 Statement PDF</button>`:''}
@@ -1008,7 +1008,8 @@ function saveSite(id){ if(!guardEdit())return; const o={name:val('s_name'),custo
   if(!o.name)return toast('Name required','err');
   if(id){Object.assign(site(id),o);}else{DB.sites.push({id:uid('s'),...o});}
   save();closeModal();toast('Site saved','ok');renderSites(); }
-function delSite(id){ if(!guardEdit())return; if(confirm('Delete site?')){ DB.sites=DB.sites.filter(s=>s.id!==id); save(); renderSites(); } }
+function delSite(id){ if(!guardEdit())return; if(DB.invoices.some(i=>i.siteId===id))return toast('Cannot delete — site is used on existing invoices','err');
+  if(confirm('Delete site?')){ DB.sites=DB.sites.filter(s=>s.id!==id); save(); renderSites(); } }
 
 /* Vehicles */
 function renderVehicles(){
@@ -1033,7 +1034,8 @@ function saveVeh(id){ if(!guardEdit())return; const o={number:val('v_num').toUpp
   if(!phoneValid(o.driverPhone))return toast('Enter a valid 10-digit driver mobile number (starts 6-9)','err');
   if(id){Object.assign(vehicle(id),o);}else{DB.vehicles.push({id:uid('v'),...o});}
   save();closeModal();toast('Vehicle saved','ok');renderVehicles(); }
-function delVeh(id){ if(!guardEdit())return; if(confirm('Delete vehicle?')){ DB.vehicles=DB.vehicles.filter(v=>v.id!==id); save(); renderVehicles(); } }
+function delVeh(id){ if(!guardEdit())return; if(DB.invoices.some(i=>i.vehicleId===id))return toast('Cannot delete — vehicle is used on existing invoices','err');
+  if(confirm('Delete vehicle?')){ DB.vehicles=DB.vehicles.filter(v=>v.id!==id); save(); renderVehicles(); } }
 
 /* Grades */
 function renderGrades(){
@@ -1068,7 +1070,8 @@ function saveGrade(id){ if(!guardEdit())return;
   if(!o.name)return toast('Grade name required','err');
   if(id){Object.assign(grade(id),o);}else{DB.grades.push({id:uid('g'),...o});}
   save();closeModal();toast('Grade saved','ok');renderGrades(); }
-function delGrade(id){ if(!guardEdit())return; if(confirm('Delete grade?')){ DB.grades=DB.grades.filter(g=>g.id!==id); save(); renderGrades(); } }
+function delGrade(id){ if(!guardEdit())return; if(DB.invoices.some(i=>i.gradeId===id))return toast('Cannot delete — grade is used on existing invoices','err');
+  if(confirm('Delete grade?')){ DB.grades=DB.grades.filter(g=>g.id!==id); save(); renderGrades(); } }
 
 /* Rates */
 function renderRates(){
@@ -1098,7 +1101,7 @@ function delRate(id){ if(!guardEdit())return; if(confirm('Delete rate?')){ DB.ra
 /* ---------------- Reports ---------------- */
 function renderReports(){
   const byMonth={};
-  DB.invoices.forEach(i=>{const m=i.date.slice(0,7);const t=invTotals(i);
+  DB.invoices.forEach(i=>{const m=(i.date||'').slice(0,7);const t=invTotals(i);
     byMonth[m]=byMonth[m]||{count:0,cum:0,taxable:0,tax:0,grand:0};
     byMonth[m].count++;byMonth[m].cum+=i.qty;byMonth[m].taxable+=t.taxable;byMonth[m].tax+=t.totalTax;byMonth[m].grand+=t.grand;});
   const months=Object.keys(byMonth).sort().reverse();
@@ -1149,7 +1152,7 @@ function drawTollPreview(){
   const rows=tollRows(id);
   if(!rows.length){ box.innerHTML='<div class="muted" style="font-size:12px">No dispatches for this customer yet.</div>'; return; }
   box.innerHTML=`<div style="overflow-x:auto"><table class="table"><thead><tr><th>Date</th><th>Grade</th><th class="num">Load</th><th class="num">Rate</th><th class="num">Basic</th><th class="num">GST</th><th class="num">Final</th><th class="num">Running Total</th><th>Vehicle</th><th>Invoice</th></tr></thead><tbody>`+
-    rows.map(r=>`<tr><td>${fmtDate(r.date)}</td><td>${r.grade}</td><td class="num">${r.load.toFixed(2)}</td><td class="num">${inr(r.rate)}</td><td class="num">${inr(r.basic)}</td><td class="num">${inr(r.gst)}</td><td class="num">${inr(r.final)}</td><td class="num"><b>${inr(r.running)}</b></td><td>${r.vehicle}</td><td>${r.invoice}</td></tr>`).join('')+`</tbody></table></div>`;
+    rows.map(r=>`<tr><td>${fmtDate(r.date)}</td><td>${esc(r.grade)}</td><td class="num">${r.load.toFixed(2)}</td><td class="num">${inr(r.rate)}</td><td class="num">${inr(r.basic)}</td><td class="num">${inr(r.gst)}</td><td class="num">${inr(r.final)}</td><td class="num"><b>${inr(r.running)}</b></td><td>${esc(r.vehicle)}</td><td>${esc(r.invoice)}</td></tr>`).join('')+`</tbody></table></div>`;
 }
 function monthName(m){ const[y,mo]=m.split('-');const n=['January','February','March','April','May','June','July','August','September','October','November','December'];return n[+mo-1]+' '+y; }
 
@@ -1194,13 +1197,16 @@ function exportGSTRegister(ym){
     round2(tR)?drCr(tR,round2(tR)>0?'Cr':'Dr'):'0.00 Cr']);
   downloadCSV('DNK_GSTR_SalesRegister_'+ym+'.csv',rows);
 }
-function exportInvoicesCSV(customerId){
+function exportInvoicesCSV(customerId, from, to){
   // Separate CGST/SGST (intra-state) and IGST (inter-state) columns so the sheet
   // works for both tax structures without double-counting.
+  // from/to (YYYY-MM-DD) restrict the export to the selected date range so the
+  // download matches exactly what is filtered on screen. Both are optional.
   const rows=[['Invoice Number','Invoice Date','Customer Name','GSTIN','State','Sale Type','Grade','HSN/SAC','Vehicle','Qty (Cum)','Rate',
     'Taxable Amount','CGST %','CGST Amount','SGST %','SGST Amount','IGST %','IGST Amount','Total Tax','Grand Total','Paid','Balance Due']];
   let T={taxable:0,cgst:0,sgst:0,igst:0,tax:0,grand:0,paid:0,due:0};
-  DB.invoices.filter(i=>!customerId||i.customerId===customerId).slice().sort(cmpInvNo).forEach(i=>{const h=hydrate(i);const t=invTotals(i);
+  DB.invoices.filter(i=>(!customerId||i.customerId===customerId)
+      &&(!from||(i.date||'')>=from)&&(!to||(i.date||'')<=to)).slice().sort(cmpInvNo).forEach(i=>{const h=hydrate(i);const t=invTotals(i);
     const saleType=t.noGst?'Domestic (No GST)':(t.interState?'Inter-State':'Intra-State');
     const half=t.gstRate/2;
     const cgstP=(!t.noGst&&!t.interState)?half:''; const sgstP=cgstP; const igstP=(!t.noGst&&t.interState)?t.gstRate:'';
@@ -1208,9 +1214,10 @@ function exportInvoicesCSV(customerId){
     T.taxable+=t.baseTaxable;T.cgst+=t.cgst;T.sgst+=t.sgst;T.igst+=t.igst;T.tax+=t.totalTax;T.grand+=t.grand;T.paid+=(i.paid||0);T.due+=due;
     rows.push([i.no,i.date,h.buyerName,h.buyerGstin||'',h.buyerState,saleType,h.gradeName,h.hsn,h.vehicle,i.qty,i.rate,
       t.baseTaxable, cgstP, t.cgst||'', sgstP, t.sgst||'', igstP, t.igst||'', t.totalTax, t.grand, i.paid||0, due]);});
-  if(rows.length===1) return toast('No invoices for this customer','err');
+  if(rows.length===1) return toast((from||to)?'No invoices in the selected date range':'No invoices for this customer','err');
   rows.push(['','','','','','TOTAL','','','','','',round2(T.taxable),'',round2(T.cgst),'',round2(T.sgst),'',round2(T.igst),round2(T.tax),round2(T.grand),round2(T.paid),round2(T.due)]);
-  const nm = customerId ? 'DNK_Invoices_'+(customer(customerId).name||'').replace(/[^A-Za-z0-9]+/g,'_') : 'DNK_Invoices_All';
+  let nm = customerId ? 'DNK_Invoices_'+(customer(customerId).name||'').replace(/[^A-Za-z0-9]+/g,'_') : 'DNK_Invoices_All';
+  if(from||to) nm += '_'+(from||'start')+'_to_'+(to||'today');
   downloadCSV(nm+'_'+todayISO()+'.csv',rows);
 }
 /* Customer-wise TOLL REGISTER — running dispatch ledger (matches the toll-project format) */
@@ -1253,7 +1260,7 @@ function printStatement(customerId){
 }
 function exportMonthlyCSV(){
   const byMonth={};
-  DB.invoices.forEach(i=>{const m=i.date.slice(0,7);const t=invTotals(i);
+  DB.invoices.forEach(i=>{const m=(i.date||'').slice(0,7);const t=invTotals(i);
     byMonth[m]=byMonth[m]||{count:0,cum:0,taxable:0,tax:0,grand:0};
     byMonth[m].count++;byMonth[m].cum+=i.qty;byMonth[m].taxable+=t.taxable;byMonth[m].tax+=t.totalTax;byMonth[m].grand+=t.grand;});
   const rows=[['Month','Bills','Total Cum','Taxable','GST','Grand Total']];
@@ -1545,9 +1552,20 @@ function backup(){
   toast('Backup downloaded','ok');
 }
 function restore(){
+  if(!guardEdit())return;
   const f=document.getElementById('restoreFile').files[0];
   if(!f)return toast('Choose a backup file','err');
-  const r=new FileReader();r.onload=e=>{try{DB=JSON.parse(e.target.result);save();toast('Backup restored','ok');go('dashboard');}catch(err){toast('Invalid backup file','err');}};
+  // Restoring replaces the entire live database and pushes to every synced device,
+  // so require an explicit confirmation before overwriting current data.
+  if(!confirm('Restore will REPLACE all current data on every synced device with this backup file. This cannot be undone. Continue?')){
+    const inp=document.getElementById('restoreFile'); if(inp)inp.value=''; return;
+  }
+  const r=new FileReader();r.onload=e=>{try{
+    const parsed=JSON.parse(e.target.result);
+    if(!parsed||typeof parsed!=='object'||Array.isArray(parsed)) return toast('Invalid backup file','err');
+    DB=migrate(parsed);           // backfill collections + sanitize ids like a normal load
+    save();toast('Backup restored','ok');go('dashboard');
+  }catch(err){toast('Invalid backup file','err');}};
   r.readAsText(f);
 }
 function resetDemo(){ if(confirm('Reset all data to demo? Current data will be lost.')){ DB=seed(); save(); go('dashboard'); toast('Reset to demo data'); } }
@@ -2541,7 +2559,7 @@ function doExportZip(){
 function val(id){ const e=document.getElementById(id); return e?e.value.trim():''; }
 function modal(title,body,footer){
   const el=document.createElement('div');el.className='modal-bg';el.id='modalBg';
-  el.innerHTML=`<div class="modal"><div class="mhd"><h3>${title}</h3><button class="x" onclick="closeModal()">×</button></div>
+  el.innerHTML=`<div class="modal"><div class="mhd"><h3>${esc(title)}</h3><button class="x" onclick="closeModal()">×</button></div>
     <div class="mbd">${body}</div><div class="mft">${footer}</div></div>`;
   el.onclick=e=>{if(e.target===el)closeModal();};
   document.body.appendChild(el);
