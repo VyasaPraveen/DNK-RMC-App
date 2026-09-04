@@ -357,13 +357,12 @@ function invoiceHTML(inv, company, opts){
     html,body{margin:0}
     /* A4 with a comfortable buffer so the whole invoice always fits on one page. */
     body{font-family:"Segoe UI",Arial,sans-serif;color:#111;font-size:12px;padding:9mm}
-    /* The document sizes to its content (never forced to full page height) so the
-       bank details, signature and declaration always sit well inside the printable
-       area and never fall into the printer's non-printable bottom margin. */
-    .doc{border:1px solid #000}
-    /* A small, fixed breathing gap before the footer block — enough to separate it
-       from the tax section without pushing it down to the page edge. */
-    .fill{height:20px}
+    /* Fill the A4 page: the framed document stretches down the page and a flexible
+       spacer (.fill) pushes the bank/signature block toward the bottom. min-height
+       is held ~30mm under the full page so the declaration & footer always keep a
+       safe clearance from the printer's non-printable bottom edge and never clip. */
+    .doc{border:1px solid #000;display:flex;flex-direction:column;min-height:calc(297mm - 30mm)}
+    .fill{flex:1 1 auto}
     .title{text-align:center;font-weight:700;padding:5px;font-size:13px;position:relative}
     .title .copy{position:absolute;right:6px;top:5px;font-size:9px;font-weight:400;color:#555}
     table{border-collapse:collapse;width:100%}
