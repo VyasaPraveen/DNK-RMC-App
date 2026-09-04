@@ -28,11 +28,13 @@ h1,h2,h3{letter-spacing:-.2px}
 .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;
   background:linear-gradient(135deg,#0f3e6e 0%,#14508c 55%,#1a5ea3 100%)}
 .login-split{display:flex;width:860px;max-width:100%;background:#fff;border-radius:18px;overflow:hidden;box-shadow:0 24px 70px rgba(8,22,40,.45)}
-.login-left{flex:1;background:linear-gradient(165deg,#14508c,#0f3e6e);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:46px 34px;text-align:center;color:#fff}
-.login-left img{width:150px;height:150px;object-fit:contain;border-radius:20px;box-shadow:0 14px 34px rgba(0,0,0,.3)}
-.login-left h1{font-size:19px;margin:22px 0 4px;letter-spacing:.4px}
-.login-left .tag{color:var(--accent);font-weight:700;font-size:11px;letter-spacing:2px;text-transform:uppercase}
-.login-left p{color:#cfe0f2;font-size:12px;margin:14px 0 0;line-height:1.7}
+/* Branding panel matches the logo's light-blue background (#05A2FD) so the logo
+   merges seamlessly into the panel — no radius/shadow tile edge around it. */
+.login-left{flex:1;background:#05A2FD;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:46px 34px;text-align:center;color:#fff}
+.login-left img{width:160px;height:160px;object-fit:contain;border-radius:0;box-shadow:none}
+.login-left h1{font-size:19px;margin:20px 0 4px;letter-spacing:.4px}
+.login-left .tag{color:var(--accent);font-weight:700;font-size:11px;letter-spacing:2px;text-transform:uppercase;text-shadow:0 1px 2px rgba(0,0,0,.18)}
+.login-left p{color:#eaf5ff;font-size:12px;margin:14px 0 0;line-height:1.7}
 .login-right{width:390px;max-width:100%;padding:48px 42px;display:flex;flex-direction:column;justify-content:center}
 .login-right h2{margin:0 0 5px;color:var(--text);font-size:24px;font-weight:700}
 .login-right .sub{color:var(--muted);font-size:13px;margin-bottom:26px}
