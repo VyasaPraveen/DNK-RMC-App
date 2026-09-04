@@ -83,6 +83,7 @@ h1,h2,h3{letter-spacing:-.2px}
 .kpi.green{border-top:3px solid var(--green)}
 .kpi.blue{border-top:3px solid var(--brand)}
 .kpi.red{border-top:3px solid var(--danger)}
+.kpi.gold{border-top:3px solid var(--accent)}
 
 /* Dashboard KPI cards + recent lists */
 .dashkpis{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:18px}

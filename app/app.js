@@ -1327,10 +1327,10 @@ const IMPORT_SPECS={
       const v=ensureVendor(r['Supplier']),qty=impNum(r['Qty']),rate=impNum(r['Rate']),amount=impNum(r['Amount'])||round2(qty*rate);
       (DB.materials=DB.materials||[]).push({id:uid('mt'),date,material,qty,vendorId:v?v.id:'',vehicleNo:String(r['Vehicle No']||'').toUpperCase().trim(),rate,amount,paid:impNum(r['Paid']),remarks:String(r['Remarks']||'').trim(),at:nowStamp()}); rep.ok++;
     }},
-  vehiclelog:{label:'Vehicle Log',headers:['Vehicle No','Date','Previous Reading','Current Reading','Fuel Filled','Amount'],
-    example:['AP39WQ0715','2026-08-05','34010','34093','FULL','3000'],
+  vehiclelog:{label:'Vehicle Log',headers:['Vehicle No','Date','Previous Reading','Current Reading','Fuel Filled','Fuel Amount','ADBLUE Filled','ADBLUE Amount'],
+    example:['AP39WQ0715','2026-08-05','34010','34093','FULL','3000','10L','500'],
     add(r,rep){ const date=impDate(r['Date']),v=ensureVehicle(r['Vehicle No']); if(!date||!v){rep.skip++;return;}
-      (DB.vehicleLogs=DB.vehicleLogs||[]).push({id:uid('vl'),vehicleId:v.id,date,prev:impNum(r['Previous Reading']),curr:impNum(r['Current Reading']),fuel:String(r['Fuel Filled']||'').trim(),amount:impNum(r['Amount']),at:nowStamp()}); rep.ok++;
+      (DB.vehicleLogs=DB.vehicleLogs||[]).push({id:uid('vl'),vehicleId:v.id,date,prev:impNum(r['Previous Reading']),curr:impNum(r['Current Reading']),fuel:String(r['Fuel Filled']||'').trim(),amount:impNum(r['Fuel Amount']!=null&&r['Fuel Amount']!==''?r['Fuel Amount']:r['Amount']),adblue:String(r['ADBLUE Filled']||'').trim(),adblueAmount:impNum(r['ADBLUE Amount']),at:nowStamp()}); rep.ok++;
     }},
   staff:{label:'Staff',headers:['Name','Designation','Phone','Monthly Salary','Wage Per Day','Join Date','Paid Leave'],
     example:['Ramesh K','Driver','9012345678','16900','650','2025-06-01','2'],
@@ -2400,6 +2400,7 @@ function renderVehicleLog(){
   const logs=(DB.vehicleLogs||[]).filter(l=>l.vehicleId===vlVehicle && (l.date||'').slice(0,7)===vlMonth).sort((a,b)=>a.date.localeCompare(b.date));
   const totDist=logs.reduce((s,l)=>s+Math.max(0,(+l.curr||0)-(+l.prev||0)),0);
   const totFuel=logs.reduce((s,l)=>s+(+l.amount||0),0);
+  const totAdblue=logs.reduce((s,l)=>s+(+l.adblueAmount||0),0);
   const actions=canEdit()&&vehs.length?`<button class="btn gold" onclick="vlModal()">➕ Add Reading</button>`:'';
   document.getElementById('main').innerHTML=
     topbar('Vehicle Log','Daily odometer &amp; fuel log — distance auto-calculated',actions)+
@@ -2410,10 +2411,11 @@ function renderVehicleLog(){
       <input type="month" id="vlMonth" value="${vlMonth}" onchange="vlMonth=this.value;renderVehicleLog()" style="max-width:170px">
       <button class="btn ghost" onclick="exportVehicleLogCSV()">⬇ Vehicle Report (CSV)</button>
     </div>
-    <div class="grid kpis" style="grid-template-columns:repeat(3,1fr);margin-bottom:16px">
+    <div class="grid kpis" style="grid-template-columns:repeat(4,1fr);margin-bottom:16px">
       <div class="kpi blue"><div class="lab">Readings</div><div class="val">${logs.length}</div></div>
       <div class="kpi accent"><div class="lab">Distance (km)</div><div class="val">${totDist}</div></div>
       <div class="kpi green"><div class="lab">Fuel Amount</div><div class="val">₹${inr(totFuel)}</div></div>
+      <div class="kpi gold"><div class="lab">ADBLUE Amount</div><div class="val">₹${inr(totAdblue)}</div></div>
     </div>
     <div class="card"><div class="hd"><h3>${vehicle(vlVehicle).number||'Vehicle'} — ${monthName(vlMonth)}</h3></div><div class="bd" style="padding:0" id="vlTbl"></div></div>`
     :`<div class="empty">Add a vehicle first in Vehicles &amp; Drivers.</div>`);
@@ -2422,9 +2424,9 @@ function renderVehicleLog(){
 function drawVehicleLog(){
   const logs=(DB.vehicleLogs||[]).filter(l=>l.vehicleId===vlVehicle && (l.date||'').slice(0,7)===vlMonth).sort((a,b)=>a.date.localeCompare(b.date));
   document.getElementById('vlTbl').innerHTML=logs.length?
-    `<table class="table"><thead><tr><th>Date</th><th class="num">Previous</th><th class="num">Current</th><th class="num">Distance (km)</th><th>Fuel Filled</th><th class="num">Amount</th><th class="right"></th></tr></thead><tbody>`+
+    `<table class="table"><thead><tr><th>Date</th><th class="num">Previous</th><th class="num">Current</th><th class="num">Distance (km)</th><th>Fuel Filled</th><th class="num">Fuel Amount</th><th>ADBLUE Filled</th><th class="num">ADBLUE Amount</th><th class="right"></th></tr></thead><tbody>`+
     logs.map(l=>{const dist=Math.max(0,(+l.curr||0)-(+l.prev||0));
-      return `<tr><td>${fmtDate(l.date)}</td><td class="num">${l.prev||0}</td><td class="num">${l.curr||0}</td><td class="num"><b>${dist}</b></td><td>${esc(l.fuel)||'-'}</td><td class="num">₹${inr(l.amount||0)}</td>
+      return `<tr><td>${fmtDate(l.date)}</td><td class="num">${l.prev||0}</td><td class="num">${l.curr||0}</td><td class="num"><b>${dist}</b></td><td>${esc(l.fuel)||'-'}</td><td class="num">₹${inr(l.amount||0)}</td><td>${esc(l.adblue)||'-'}</td><td class="num">₹${inr(l.adblueAmount||0)}</td>
       <td class="right">${canEdit()?`<button class="btn ghost sm" onclick="vlModal('${l.id}')">✎</button><button class="btn danger sm" onclick="delVehicleLog('${l.id}')">✕</button>`:''}</td></tr>`;}).join('')+`</tbody></table>`
     :`<div class="empty">No readings for this vehicle in ${monthName(vlMonth)}.</div>`;
 }
@@ -2432,7 +2434,7 @@ function vlModal(id){
   const l=id?(DB.vehicleLogs||[]).find(x=>x.id===id):null;
   const prevLogs=(DB.vehicleLogs||[]).filter(x=>x.vehicleId===vlVehicle).sort((a,b)=>a.date.localeCompare(b.date));
   const lastCurr=prevLogs.length?prevLogs[prevLogs.length-1].curr:'';
-  const d=l||{date:todayISO(),prev:lastCurr,curr:'',fuel:'',amount:''};
+  const d=l||{date:todayISO(),prev:lastCurr,curr:'',fuel:'',amount:'',adblue:'',adblueAmount:''};
   modal((id?'Edit':'Add')+' Reading — '+(vehicle(vlVehicle).number||''),
     `<div class="form-grid">
       <div class="field"><label>Date</label><input id="vl_date" type="date" value="${d.date||todayISO()}" max="${todayISO()}"></div>
@@ -2441,6 +2443,8 @@ function vlModal(id){
       <div class="field"><label>Distance (km)</label><input id="vl_dist" readonly value=""></div>
       <div class="field"><label>Fuel Filled</label><input id="vl_fuel" value="${esc(d.fuel)}" placeholder="FULL / 20L / -"></div>
       <div class="field"><label>Fuel Amount (₹)</label><input id="vl_amt" type="number" step="0.01" value="${d.amount!==''&&d.amount!=null?d.amount:''}"></div>
+      <div class="field"><label>ADBLUE Filled</label><input id="vl_adblue" value="${esc(d.adblue)}" placeholder="FULL / 10L / -"></div>
+      <div class="field"><label>ADBLUE Amount (₹)</label><input id="vl_adblueamt" type="number" step="0.01" value="${d.adblueAmount!==''&&d.adblueAmount!=null?d.adblueAmount:''}"></div>
     </div>`,
     `<button class="btn ghost" onclick="closeModal()">Cancel</button><button class="btn green" onclick="saveVehicleLog('${id||''}')">Save</button>`);
   vlDist();
@@ -2452,7 +2456,8 @@ function saveVehicleLog(id){
   if(date>todayISO())return toast('Cannot log a future date','err');
   const prev=Number(val('vl_prev'))||0, curr=Number(val('vl_curr'))||0;
   if(curr<prev)return toast('Current reading cannot be less than previous','err');
-  const o={vehicleId:vlVehicle,date,prev,curr,fuel:val('vl_fuel'),amount:Number(val('vl_amt'))||0};
+  const o={vehicleId:vlVehicle,date,prev,curr,fuel:val('vl_fuel'),amount:Number(val('vl_amt'))||0,
+    adblue:val('vl_adblue'),adblueAmount:Number(val('vl_adblueamt'))||0};
   DB.vehicleLogs=DB.vehicleLogs||[];
   if(id){ Object.assign(DB.vehicleLogs.find(x=>x.id===id),o); }
   else { o.id=uid('vl'); o.at=nowStamp(); DB.vehicleLogs.push(o); }
@@ -2462,12 +2467,12 @@ function saveVehicleLog(id){
 function delVehicleLog(id){ if(!guardEdit())return; if(confirm('Delete this reading?')){ DB.vehicleLogs=DB.vehicleLogs.filter(l=>l.id!==id); save(); renderVehicleLog(); } }
 function exportVehicleLogCSV(){
   const v=vehicle(vlVehicle);
-  const rows=[['DATE','PREVIOUS READING','CURRENT READING','DISTANCE (KM)','FUEL FILLED','AMOUNT']];
-  let tD=0,tA=0;
+  const rows=[['DATE','PREVIOUS READING','CURRENT READING','DISTANCE (KM)','FUEL FILLED','FUEL AMOUNT','ADBLUE FILLED','ADBLUE AMOUNT']];
+  let tD=0,tA=0,tB=0;
   (DB.vehicleLogs||[]).filter(l=>l.vehicleId===vlVehicle && (l.date||'').slice(0,7)===vlMonth).sort((a,b)=>a.date.localeCompare(b.date))
-    .forEach(l=>{const dist=Math.max(0,(+l.curr||0)-(+l.prev||0));tD+=dist;tA+=+l.amount||0;
-      rows.push([l.date,l.prev||0,l.curr||0,dist,l.fuel||'',l.amount||0]);});
-  rows.push(['TOTAL','','',tD,'',round2(tA)]);
+    .forEach(l=>{const dist=Math.max(0,(+l.curr||0)-(+l.prev||0));tD+=dist;tA+=+l.amount||0;tB+=+l.adblueAmount||0;
+      rows.push([l.date,l.prev||0,l.curr||0,dist,l.fuel||'',l.amount||0,l.adblue||'',l.adblueAmount||0]);});
+  rows.push(['TOTAL','','',tD,'',round2(tA),'',round2(tB)]);
   downloadCSV('DNK_VehicleLog_'+(v.number||'vehicle')+'_'+vlMonth+'.csv',rows);
 }
 
